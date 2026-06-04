@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>ส. ขอนแก่น Office</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f0f1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Leelawadee UI', 'Tahoma', sans-serif;
+  }
+  #office {
+    max-width: 900px;
+    width: 100%;
+    image-rendering: pixelated;
+    border: 2px solid #7c3aed;
+    box-shadow: 0 0 40px rgba(124,58,237,0.4), 0 0 80px rgba(196,18,48,0.2);
+  }
+  #status {
+    margin-top: 10px;
+    color: #7c3aed;
+    font-size: 12px;
+    letter-spacing: 2px;
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+<canvas id="office"></canvas>
+<div id="status">● LIVE — ส. ขอนแก่น AI Office</div>
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const W = 900, H = 560;
+const S = 2; // pixel art scale: 1 unit = S canvas px
+
+const canvas = document.getElementById('office');
+const ctx    = canvas.getContext('2d');
+
+const DPR = window.devicePixelRatio || 1;
+canvas.width  = W * DPR;
+canvas.height = H * DPR;
+canvas.style.width  = W + 'px';
+canvas.style.height = H + 'px';
+ctx.scale(DPR, DPR);
+
+// ============================================================
+// COLORS
+// ============================================================
+const C = {
+  floor:        '#2a2a3e',
+  wall:         '#1a1a2e',
+  wallLine:     '#3d3d5c',
+  floorLine:    '#252535',
+  brand:        '#C41230',
+  amber:        '#d97706',
+  purple:       '#7c3aed',
+  gold:         '#ffd700',
+  macBody:      '#e8e8e8',
+  macScreen:    '#1a2a3a',
+  macStand:     '#c0c0c0',
+  deskTop:      '#5c3d28',
+  gamingTop:    '#2d2d4e',
+  chairRed:     '#8b0000',
+  chairBlack:   '#1a1a1a',
+  coffeeM:      '#2d2d2d',
+  coffeeLight:  '#d97706',
+  sofaColor:    '#2d3561',
+  sofaDark:     '#1e2449',
+  rgbR:         '#ff3030',
+  rgbG:         '#30ff30',
+  rgbB:         '#3030ff',
+  // agent colors (used in later tasks)
+  skin:         '#f5d5a0',
+  hair:         '#2d1b00',
+  leg:          '#1a1a1a',
+  white:        '#ffffff',
+  crown:        '#ffd700',
+  readerBlue:   '#3b82f6',
+  coderGreen:   '#22c55e',
+  searchOrange: '#f97316',
+  jamesGold:    '#fbbf24',
+};
+
+// ============================================================
+// ROOM LAYOUT
+// ============================================================
+const ROOM = { wallH: 90 };
+
+// Furniture bounding boxes {x, y, w, h}
+const FURN = {
+  jamesDesk:  { x: 20,  y: 95,  w: 160, h: 80 },
+  readerDesk: { x: 230, y: 95,  w: 100, h: 70 },
+  coderDesk:  { x: 390, y: 95,  w: 100, h: 70 },
+  coffee:     { x: 570, y: 95,  w: 70,  h: 90 },
+  searchDesk: { x: 20,  y: 390, w: 100, h: 80 },
+  sofa:       { x: 390, y: 385, w: 180, h: 90 },
+};
+
+// Agent work positions (feet, used in later tasks)
+const WORK_POS = {
+  jamesmie: { x: 100, y: 185 },
+  reader:   { x: 270, y: 175 },
+  coder:    { x: 430, y: 175 },
+  searcher: { x: 60,  y: 480 },
+};
+
+// Idle destinations (used in later tasks)
+const IDLE_POS = {
+  coffee: { x: 595, y: 195 },
+  sofa:   { x: 460, y: 440 },
+};
+
+// Center (Jamesmie walks here to announce)
+const CENTER_POS = { x: 450, y: 320 };
+
+// Walk bounds
+const WALK = { x: 80, y: 200, maxX: 820, maxY: 490 };
+
+// ============================================================
+// DRAW HELPERS
+// ============================================================
+function rect(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+}
+
+function glow(x, y, r, color) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color);
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+}
+
+function drawText(str, x, y, opts = {}) {
+  ctx.save();
+  ctx.font = `${opts.weight || 'normal'} ${opts.size || 13}px ${"'Leelawadee UI','Tahoma',sans-serif"}`;
+  ctx.fillStyle = opts.color || C.white;
+  ctx.textAlign = opts.align || 'center';
+  ctx.textBaseline = opts.baseline || 'middle';
+  if (opts.shadow) {
+    ctx.shadowColor = opts.shadow;
+    ctx.shadowBlur = opts.shadowBlur || 8;
+  }
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// ============================================================
+// DRAW ROOM
+// ============================================================
+function drawRoom() {
+  // Back wall
+  rect(0, 0, W, ROOM.wallH, C.wall);
+  // Baseboard line
+  rect(0, ROOM.wallH - 2, W, 2, C.wallLine);
+  // Floor
+  rect(0, ROOM.wallH, W, H - ROOM.wallH, C.floor);
+  // Floor grid lines
+  ctx.strokeStyle = C.floorLine;
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 60) {
+    ctx.beginPath(); ctx.moveTo(x, ROOM.wallH); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = ROOM.wallH; y <= H; y += 60) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+}
+
+// ============================================================
+// DRAW FURNITURE
+// ============================================================
+function drawIMac(x, y) {
+  const sw = 80, sh = 60;
+  // stand base
+  rect(x + sw/2 - 18, y + sh + 8, 36, 6, C.macStand);
+  // neck
+  rect(x + sw/2 - 5, y + sh, 10, 10, C.macStand);
+  // screen body
+  rect(x, y, sw, sh, C.macBody);
+  rect(x + 4, y + 4, sw - 8, sh - 10, C.macScreen);
+  rect(x + 5, y + 5, sw - 10, sh - 12, '#1f3550');
+  // power dot
+  rect(x + sw/2 - 2, y + sh - 6, 4, 4, '#888');
+}
+
+function drawDesk(x, y, w, h) {
+  rect(x, y, w, h, C.deskTop);
+  rect(x, y, w, 4, '#7a5236');
+  rect(x, y + h - 4, w, 4, '#2a1810');
+  rect(x, y + 4, 4, h - 4, '#4a2f1e');
+}
+
+function drawGamingDesk(x, y, w, h, rgbColor) {
+  rect(x, y, w, h, C.gamingTop);
+  rect(x, y, w, 4, '#4d4d8a');
+  rect(x, y + h - 4, w, 4, '#0d0d1a');
+  // RGB strip
+  rect(x + 2, y + h - 4, w - 4, 3, rgbColor);
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  glow(x + w/2, y + h, 60, rgbColor);
+  ctx.restore();
+}
+
+function drawMonitor(x, y, w, h) {
+  rect(x, y, w, h, '#111');
+  rect(x + 2, y + 2, w - 4, h - 6, '#0d1a2a');
+  rect(x + 3, y + 3, w - 6, (h - 8) / 2, '#0f2035');
+  // stand
+  rect(x + w/2 - 6, y + h, 12, 5, '#333');
+  rect(x + w/2 - 14, y + h + 5, 28, 3, '#333');
+}
+
+function drawGamingChair(x, y, rgbColor) {
+  rect(x, y + 20, 40, 16, C.chairBlack);
+  rect(x + 5, y, 30, 22, C.chairRed);
+  rect(x + 8, y + 2, 24, 18, C.chairBlack);
+  rect(x + 8, y - 8, 24, 10, C.chairRed);
+  rect(x - 2, y + 18, 8, 10, '#333');
+  rect(x + 34, y + 18, 8, 10, '#333');
+  ctx.save(); ctx.globalAlpha = 0.2;
+  glow(x + 20, y + 36, 30, rgbColor);
+  ctx.restore();
+}
+
+function drawCoffeeMachine(x, y) {
+  const w = FURN.coffee.w, h = FURN.coffee.h;
+  rect(x, y, w, h, C.coffeeM);
+  rect(x + 4, y + 4, w - 8, 20, '#1a1a1a');
+  rect(x + w/2 - 4, y + 28, 8, 8, C.coffeeLight);
+  rect(x + w/2 - 12, y + h - 20, 24, 4, '#444');
+  rect(x + w/2 - 7, y + h - 16, 14, 12, '#f5f0e0');
+  rect(x + w/2 - 5, y + h - 14, 10, 8, '#6b3a2a');
+}
+
+function drawSofa(x, y, w, h) {
+  rect(x, y + h/2, w, h/2, C.sofaDark);
+  rect(x, y, w, h/2 + 6, C.sofaColor);
+  rect(x, y, 18, h, C.sofaDark);
+  rect(x + w - 18, y, 18, h, C.sofaDark);
+  rect(x + 18, y + h/2 - 2, w - 36, 3, C.sofaDark);
+  rect(x + 18, y + 4, w - 36, 6, '#3d4a7a');
+}
+
+function drawAllFurniture(rgbColor) {
+  const jd = FURN.jamesDesk;
+  drawGamingDesk(jd.x, jd.y, jd.w, jd.h, rgbColor);
+  drawMonitor(jd.x + 10, jd.y - 50, 55, 38);
+  drawMonitor(jd.x + 75, jd.y - 50, 55, 38);
+  drawGamingChair(jd.x + 55, jd.y + jd.h, rgbColor);
+
+  const rd = FURN.readerDesk;
+  drawDesk(rd.x, rd.y, rd.w, rd.h);
+  drawIMac(rd.x + 10, rd.y - 72);
+
+  const cd = FURN.coderDesk;
+  drawDesk(cd.x, cd.y, cd.w, cd.h);
+  drawIMac(cd.x + 10, cd.y - 72);
+
+  const sd = FURN.searchDesk;
+  drawDesk(sd.x, sd.y, sd.w, sd.h);
+  drawIMac(sd.x + 10, sd.y - 72);
+  ctx.save(); ctx.globalAlpha = 0.4;
+  rect(sd.x + 14, sd.y - 68, 72, 52, '#001a00');
+  ctx.restore();
+
+  drawCoffeeMachine(FURN.coffee.x, FURN.coffee.y);
+  drawSofa(FURN.sofa.x, FURN.sofa.y, FURN.sofa.w, FURN.sofa.h);
+}
+
+// ============================================================
+// ส. ขอนแก่น SIGN
+// ============================================================
+let _signGlowPhase = 0;
+
+function drawSign(dt) {
+  _signGlowPhase = (_signGlowPhase + dt * 0.002) % (Math.PI * 2);
+  const glowAlpha = 0.55 + 0.45 * Math.sin(_signGlowPhase);
+
+  const sx = W / 2, sy = 38, sw = 300, sh = 46;
+
+  ctx.save();
+  ctx.shadowColor = C.brand;
+  ctx.shadowBlur = 20 * glowAlpha;
+  rect(sx - sw/2 - 4, sy - sh/2 - 4, sw + 8, sh + 8, '#0d0d1a');
+  ctx.restore();
+
+  ctx.strokeStyle = C.gold;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(sx - sw/2 - 2, sy - sh/2 - 2, sw + 4, sh + 4);
+
+  rect(sx - sw/2, sy - sh/2, sw, sh, C.brand);
+
+  // House icon
+  const hx = sx - sw/2 + 22, hy = sy;
+  ctx.fillStyle = C.gold;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy - 14);
+  ctx.lineTo(hx - 12, hy);
+  ctx.lineTo(hx + 12, hy);
+  ctx.closePath();
+  ctx.fill();
+  rect(hx - 9, hy, 18, 10, C.gold);
+  rect(hx - 3, hy + 4, 6, 6, C.brand);
+
+  ctx.save();
+  ctx.shadowColor = C.gold;
+  ctx.shadowBlur = 14 * glowAlpha;
+  drawText('ส. ขอนแก่น', sx + 16, sy, {
+    size: 22, weight: 'bold', color: C.white,
+    shadow: C.gold, shadowBlur: 12 * glowAlpha,
+  });
+  ctx.restore();
+}
+
+// ============================================================
+// PIXEL ART SPRITES
+// ============================================================
+// S=2: each "pixel" = 2×2 canvas px → 16-wide × 24-tall grid = 32×48 canvas px
+// Color key: '.'=transparent 's'=skin 'h'=hair 'b'=body(param) 'l'=leg 'w'=white 'c'=crown 'e'=eye
+
+const SPR_STAND = [
+  '....hhhhhh......',
+  '....hsssssh.....',
+  '....hssessh.....',
+  '....hsssssh.....',
+  '....hhhhhhh.....',
+  '.....bbbbb......',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '.....bbbbb......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '...lll..lll.....',
+  '...lll..lll.....',
+  '...lll..lll.....',
+  '...lll..lll.....',
+  '...lll..lll.....',
+];
+
+const SPR_WALK1 = [
+  '....hhhhhh......',
+  '....hsssssh.....',
+  '....hssessh.....',
+  '....hsssssh.....',
+  '....hhhhhhh.....',
+  '.....bbbbb......',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '.....bbbbb......',
+  '...lll...ll.....',
+  '..llll...ll.....',
+  '..lll....ll.....',
+  '..lll.....ll....',
+  '..lll.....ll....',
+  '.llll.....ll....',
+  '.llll......ll...',
+  '.lll.......lll..',
+  '.lll.......lll..',
+  '.lll.......lll..',
+  '.lll.......lll..',
+  '.lll.......lll..',
+];
+
+const SPR_WALK2 = [
+  '....hhhhhh......',
+  '....hsssssh.....',
+  '....hssessh.....',
+  '....hsssssh.....',
+  '....hhhhhhh.....',
+  '.....bbbbb......',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '.....bbbbb......',
+  '....ll...lll....',
+  '....ll...llll...',
+  '....ll....lll...',
+  '...ll.....lll...',
+  '...ll.....llll..',
+  '...ll.....llll..',
+  '...ll......lll..',
+  '..lll......lll..',
+  '..lll......lll..',
+  '..lll......lll..',
+  '..lll......lll..',
+  '..lll......lll..',
+];
+
+const SPR_SIT = [
+  '....hhhhhh......',
+  '....hsssssh.....',
+  '....hssessh.....',
+  '....hsssssh.....',
+  '....hhhhhhh.....',
+  '.....bbbbb......',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '....bbbbbbb.....',
+  '.....bbbbb......',
+  '....llllll......',
+  '....llllll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+];
+
+const SPR_PHONE = [
+  '....hhhhhh......',
+  '....hsssssh.....',
+  '....hssessh.....',
+  '....hsssssh.....',
+  '.....hhhhhh.....',
+  '......bbbbb.....',
+  '.....bbbbbbb....',
+  '.....bbbbbbb....',
+  '.....bbbbbbbb...',
+  '.....bbbbbbbbb..',
+  '......bbbbb.....',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '...lll..lll.....',
+  '...lll..lll.....',
+  '...lll..lll.....',
+  '...lll..lll.....',
+  '...lll..lll.....',
+  '...lll..lll.....',
+];
+
+// Walk cycle: [stand, walk1, stand, walk2]
+const WALK_FRAMES = [SPR_STAND, SPR_WALK1, SPR_STAND, SPR_WALK2];
+
+// Crown row for Jamesmie (inserted at top)
+const CROWN_ROW = '....ccccccc.....';
+
+function drawSprite(grid, cx, cy, bodyColor, facingLeft = false) {
+  const colorMap = {
+    's': C.skin, 'h': C.hair, 'b': bodyColor,
+    'l': C.leg,  'w': C.white, 'c': C.crown, 'e': '#2d1b00',
+  };
+  const cols = grid[0].length;
+  const rows = grid.length;
+  const sprW = cols * S;
+
+  ctx.save();
+  if (facingLeft) {
+    ctx.translate(cx + sprW, cy);
+    ctx.scale(-1, 1);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const ch = grid[r][c];
+        if (ch === '.') continue;
+        ctx.fillStyle = colorMap[ch] || '#ff00ff';
+        ctx.fillRect(c * S, r * S, S, S);
+      }
+    }
+  } else {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const ch = grid[r][c];
+        if (ch === '.') continue;
+        ctx.fillStyle = colorMap[ch] || '#ff00ff';
+        ctx.fillRect(cx + c * S, cy + r * S, S, S);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+
+// ============================================================
+// AGENT OBJECTS
+// ============================================================
+const agents = {
+  jamesmie: {
+    name: 'Jamesmie', color: C.jamesGold,
+    pos: { x: 100, y: 320 }, targetPos: null,
+    speed: 85, state: 'idle_wander',
+    frameIdx: 0, frameTimer: 0,
+    idleTimer: 0, idleDuration: 5000 + Math.random() * 10000,
+    facingLeft: false,
+    taskLabel: '', speechText: '', speechTimer: 0,
+    lastEventTs: 0, lastCompletedTs: 0,
+  },
+  reader: {
+    name: 'Reader', color: C.readerBlue,
+    pos: { x: 350, y: 300 }, targetPos: null,
+    speed: 85, state: 'idle_wander',
+    frameIdx: 0, frameTimer: 0,
+    idleTimer: 0, idleDuration: 5000 + Math.random() * 10000,
+    facingLeft: false,
+    taskLabel: '', speechText: '', speechTimer: 0,
+    lastEventTs: 0, lastCompletedTs: 0,
+  },
+  coder: {
+    name: 'Coder', color: C.coderGreen,
+    pos: { x: 500, y: 340 }, targetPos: null,
+    speed: 85, state: 'idle_wander',
+    frameIdx: 0, frameTimer: 0,
+    idleTimer: 0, idleDuration: 5000 + Math.random() * 10000,
+    facingLeft: false,
+    taskLabel: '', speechText: '', speechTimer: 0,
+    lastEventTs: 0, lastCompletedTs: 0,
+  },
+  searcher: {
+    name: 'Searcher', color: C.searchOrange,
+    pos: { x: 200, y: 380 }, targetPos: null,
+    speed: 85, state: 'idle_wander',
+    frameIdx: 0, frameTimer: 0,
+    idleTimer: 0, idleDuration: 5000 + Math.random() * 10000,
+    facingLeft: false,
+    taskLabel: '', speechText: '', speechTimer: 0,
+    lastEventTs: 0, lastCompletedTs: 0,
+  },
+};
+
+// ============================================================
+// MOVEMENT HELPERS
+// ============================================================
+function distTo(agent, target) {
+  return Math.hypot(agent.pos.x - target.x, agent.pos.y - target.y);
+}
+
+function moveToward(agent, target, dt) {
+  const dx = target.x - agent.pos.x;
+  const dy = target.y - agent.pos.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 2) return true; // arrived
+  const step = agent.speed * dt / 1000;
+  agent.pos.x += (dx / d) * Math.min(step, d);
+  agent.pos.y += (dy / d) * Math.min(step, d);
+  agent.facingLeft = dx < 0;
+  return false;
+}
+
+// ============================================================
+// BUBBLE DRAWING
+// ============================================================
+function drawBubble(agent, text_, isTask) {
+  const bx = agent.pos.x;
+  const by = agent.pos.y - 24 * S - 14;
+  ctx.save();
+  ctx.font = '12px "Leelawadee UI","Tahoma",sans-serif';
+  const measured = ctx.measureText(text_).width;
+  const tw = Math.min(measured + 16, 170);
+  const th = 22;
+  const bx0 = bx - tw / 2;
+  const by0 = by - th / 2;
+
+  // Bubble background
+  ctx.fillStyle = isTask ? 'rgba(30,30,60,0.92)' : 'rgba(45,53,97,0.92)';
+  ctx.strokeStyle = isTask ? C.amber : C.purple;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(bx0, by0, tw, th, 5);
+  ctx.fill();
+  ctx.stroke();
+
+  // Tail
+  ctx.beginPath();
+  ctx.moveTo(bx - 5, by0 + th);
+  ctx.lineTo(bx, by0 + th + 7);
+  ctx.lineTo(bx + 5, by0 + th);
+  ctx.closePath();
+  ctx.fillStyle = isTask ? 'rgba(30,30,60,0.92)' : 'rgba(45,53,97,0.92)';
+  ctx.fill();
+
+  // Text
+  ctx.fillStyle = C.white;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const display = text_.length > 22 ? text_.slice(0, 21) + '…' : text_;
+  ctx.fillText(display, bx, by);
+  ctx.restore();
+}
+
+// Override drawAgent here to include bubbles (replaces the version from Task 3)
+function drawAgent(agent) {
+  const sprW = 16 * S;
+  const sprH = 24 * S;
+  const x = Math.round(agent.pos.x - sprW / 2);
+  const y = Math.round(agent.pos.y - sprH);
+
+  let grid;
+  if (agent.state === 'idle_chill') {
+    grid = SPR_SIT;
+  } else if (agent.state === 'idle_phone') {
+    grid = SPR_PHONE;
+  } else {
+    grid = WALK_FRAMES[agent.frameIdx];
+  }
+
+  if (agent.name === 'Jamesmie') {
+    const crownGrid = [CROWN_ROW, CROWN_ROW, ...grid.slice(0, 22)];
+    drawSprite(crownGrid, x, y - 4, agent.color, agent.facingLeft);
+  } else {
+    drawSprite(grid, x, y, agent.color, agent.facingLeft);
+  }
+
+  drawText(agent.name, agent.pos.x, agent.pos.y + 8, {
+    size: 10, color: '#aaa', align: 'center',
+  });
+
+  if (agent.taskLabel)  drawBubble(agent, agent.taskLabel, true);
+  if (agent.speechText) drawBubble(agent, agent.speechText, false);
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+let _lastTs = 0;
+let _rgbPhase = 0;
+let _signDt = 0;
+
+function getRgbColor() {
+  const t = (_rgbPhase % (Math.PI * 2)) / (Math.PI * 2);
+  if (t < 0.33) return C.rgbR;
+  if (t < 0.66) return C.rgbB;
+  return C.rgbG;
+}
+
+// ============================================================
+// IDLE STATE MACHINE HELPERS
+// ============================================================
+const CHAT_PHRASES = [
+  'deploy แล้วหรือยัง?', 'วันนี้ busy มาก', 'กาแฟหมดแล้ว',
+  'bug อีกแล้ว...', 'เดี๋ยว PR นะ', 'lunch กันไหม?',
+  'review code ด้วยนะ', 'tests ผ่านแล้ว!',
+];
+
+function _pickIdleState() {
+  const r = Math.random();
+  if (r < 0.40) return 'idle_wander';
+  if (r < 0.60) return 'idle_phone';
+  if (r < 0.80) return 'idle_coffee';
+  return 'idle_chill';
+}
+
+let _chatCheckTimer = 0;
+
+function _checkChat() {
+  const idleList = Object.values(agents).filter(ag =>
+    ag !== agents.jamesmie && ag.state.startsWith('idle') && ag.state !== 'idle_chat'
+  );
+  for (let i = 0; i < idleList.length; i++) {
+    for (let j = i + 1; j < idleList.length; j++) {
+      const a = idleList[i], b = idleList[j];
+      const dist = Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y);
+      if (dist < 80 && Math.random() < 0.30) {
+        const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
+        a.speechText = phrase;
+        a.speechTimer = 3500;
+        b.speechText = '😄';
+        b.speechTimer = 3500;
+        a.facingLeft = a.pos.x > b.pos.x;
+        b.facingLeft = b.pos.x > a.pos.x;
+      }
+    }
+  }
+}
+
+// ============================================================
+// JAMESMIE TRIGGER FLOW
+// ============================================================
+let _lastJamesmieTs = 0;
+
+function triggerJamesmie(text, ts) {
+  if (!ts || ts <= _lastJamesmieTs) return;
+  // Don't interrupt an active tool
+  const jam = agents.jamesmie;
+  if (jam.state === 'working' || jam.state === 'walking_to_desk') return;
+  _lastJamesmieTs = ts;
+
+  const truncated = text.length > 40 ? text.slice(0, 39) + '…' : text;
+  jam.state = 'jamesmie_stand';
+  jam._jMsg = truncated;
+  jam._jPhase = 'walking_center';
+  jam._jTimer = 0;
+  jam.targetPos = { ...CENTER_POS };
+  jam.speechText = '';
+  jam._idleInit = false;
+}
+
+// ============================================================
+// EVENT POLLING
+// ============================================================
+function _activateAgent(agentKey, label, ts) {
+  const ag = agents[agentKey];
+  if (!ag || ts <= ag.lastEventTs) return;
+  ag.lastEventTs = ts;
+  ag.taskLabel = label;
+  ag.speechText = '';
+  ag.speechTimer = 0;
+  ag._idleInit = false;
+  ag.state = 'walking_to_desk';
+  ag.targetPos = { x: WORK_POS[agentKey].x, y: WORK_POS[agentKey].y };
+}
+
+function _completeAgent(agentKey, ts) {
+  const ag = agents[agentKey];
+  if (!ag || ts <= ag.lastCompletedTs) return;
+  ag.lastCompletedTs = ts;
+  if (ag.state === 'working' || ag.state === 'walking_to_desk') {
+    ag.state = 'done_flash';
+    ag.taskLabel = '✅ Done';
+    ag._doneTimer = 1200;
+  }
+}
+
+async function fetchEvents() {
+  try {
+    const r = await fetch('./agent-events.json?_=' + Date.now());
+    if (!r.ok) return;
+    const data = await r.json();
+
+    if (data.current && data.current.status === 'active') {
+      _activateAgent(data.current.agent, data.current.label, data.current.timestamp);
+    }
+    if (data.last_completed) {
+      _completeAgent(data.last_completed.agent, data.last_completed.timestamp);
+    }
+    if (data.user_message) {
+      triggerJamesmie(data.user_message.text, data.user_message.timestamp);
+    }
+  } catch(e) { /* silently ignore */ }
+}
+
+setInterval(fetchEvents, 500);
+
+function update(dt) {
+  _rgbPhase = (_rgbPhase + dt * 0.003) % (Math.PI * 6);
+  _signDt += dt;
+
+  for (const ag of Object.values(agents)) {
+    // Advance walk frame animation
+    if (ag.state !== 'idle_chill' && ag.state !== 'idle_phone') {
+      ag.frameTimer += dt;
+      if (ag.frameTimer >= 150) {
+        ag.frameTimer = 0;
+        ag.frameIdx = (ag.frameIdx + 1) % 4;
+      }
+    }
+    // Tick speech bubble timer
+    if (ag.speechTimer > 0) {
+      ag.speechTimer -= dt;
+      if (ag.speechTimer <= 0) ag.speechText = '';
+    }
+    // Tick task label done-flash timer
+    if (ag._doneTimer !== undefined && ag._doneTimer > 0) {
+      ag._doneTimer -= dt;
+      if (ag._doneTimer <= 0) {
+        ag._doneTimer = 0;
+        ag.taskLabel = '';
+        ag.state = 'idle_wander';
+        ag.targetPos = null;
+        ag.idleTimer = 0;
+      }
+    }
+  }
+  // ---- IDLE STATE MACHINE ----
+  for (const ag of Object.values(agents)) {
+    if (!ag.state.startsWith('idle')) continue;
+    ag.idleTimer += dt;
+
+    if (ag.state === 'idle_wander') {
+      if (!ag.targetPos) {
+        ag.targetPos = {
+          x: WALK.x + Math.random() * (WALK.maxX - WALK.x),
+          y: WALK.y + Math.random() * (WALK.maxY - WALK.y),
+        };
+        ag.idleDuration = 3000 + Math.random() * 8000;
+      }
+      const arrived = moveToward(ag, ag.targetPos, dt);
+      if (arrived || ag.idleTimer > ag.idleDuration) {
+        ag.idleTimer = 0;
+        ag.targetPos = null;
+        ag.state = _pickIdleState();
+      }
+    }
+
+    else if (ag.state === 'idle_phone') {
+      if (!ag._idleInit) {
+        ag._idleInit = true;
+        ag.idleDuration = 4000 + Math.random() * 8000;
+        ag.speechText = '📱';
+        ag.speechTimer = ag.idleDuration;
+      }
+      if (ag.idleTimer > ag.idleDuration) {
+        ag._idleInit = false;
+        ag.idleTimer = 0;
+        ag.state = _pickIdleState();
+      }
+    }
+
+    else if (ag.state === 'idle_coffee') {
+      if (!ag._idleInit) {
+        ag._idleInit = true;
+        ag.idleDuration = 5000 + Math.random() * 8000;
+      }
+      if (!ag.targetPos) {
+        ag.targetPos = { x: IDLE_POS.coffee.x, y: IDLE_POS.coffee.y };
+      }
+      const atCoffee = moveToward(ag, ag.targetPos, dt);
+      if (atCoffee) {
+        if (!ag._coffeeArrived) {
+          ag._coffeeArrived = true;
+          ag.speechText = '☕';
+          ag.speechTimer = ag.idleDuration;
+        }
+        if (ag.idleTimer > ag.idleDuration) {
+          ag._idleInit = false;
+          ag._coffeeArrived = false;
+          ag.idleTimer = 0;
+          ag.targetPos = null;
+          ag.state = _pickIdleState();
+        }
+      }
+    }
+
+    else if (ag.state === 'idle_chill') {
+      if (!ag._idleInit) {
+        ag._idleInit = true;
+        ag.idleDuration = 7000 + Math.random() * 10000;
+      }
+      if (!ag.targetPos) {
+        ag.targetPos = { x: IDLE_POS.sofa.x, y: IDLE_POS.sofa.y };
+      }
+      const atSofa = moveToward(ag, ag.targetPos, dt);
+      if (atSofa) {
+        if (!ag._sofaArrived) {
+          ag._sofaArrived = true;
+          ag.speechText = '😴';
+          ag.speechTimer = ag.idleDuration;
+        }
+        if (ag.idleTimer > ag.idleDuration) {
+          ag._idleInit = false;
+          ag._sofaArrived = false;
+          ag.idleTimer = 0;
+          ag.targetPos = null;
+          ag.state = _pickIdleState();
+        }
+      }
+    }
+  }
+
+  // ---- CHAT PROXIMITY CHECK (every 2s) ----
+  _chatCheckTimer += dt;
+  if (_chatCheckTimer > 2000) {
+    _chatCheckTimer = 0;
+    _checkChat();
+  }
+  // ---- ACTIVE TOOL STATES ----
+  for (const ag of Object.values(agents)) {
+    if (ag.state === 'walking_to_desk') {
+      const arrived = moveToward(ag, ag.targetPos, dt);
+      if (arrived) {
+        ag.state = 'working';
+      }
+    }
+    // 'working' state: task bubble pulses — no extra logic needed here
+    // 'done_flash' state: _doneTimer handled in the timer tick block above
+  }
+  // ---- JAMESMIE ACTIVE FLOW ----
+  const jam = agents.jamesmie;
+  if (jam.state === 'jamesmie_stand') {
+    jam._jTimer += dt;
+
+    if (jam._jPhase === 'walking_center') {
+      const arrived = moveToward(jam, CENTER_POS, dt);
+      if (arrived) {
+        jam._jPhase = 'speaking';
+        jam._jTimer = 0;
+        jam.speechText = jam._jMsg;
+        jam.speechTimer = 3200;
+        // Other agents face Jamesmie
+        for (const ag of Object.values(agents)) {
+          if (ag !== jam && ag.state.startsWith('idle')) {
+            ag.facingLeft = ag.pos.x > CENTER_POS.x;
+          }
+        }
+      }
+    }
+
+    if (jam._jPhase === 'speaking' && jam._jTimer > 3500) {
+      jam._jPhase = 'returning';
+      jam._jTimer = 0;
+      jam.targetPos = { ...WORK_POS.jamesmie };
+    }
+
+    if (jam._jPhase === 'returning') {
+      const home = moveToward(jam, WORK_POS.jamesmie, dt);
+      if (home) {
+        jam.state = 'idle_wander';
+        jam.targetPos = null;
+        jam._jPhase = null;
+        jam._jMsg = '';
+        jam._idleInit = false;
+        jam.idleTimer = 0;
+      }
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawRoom();
+  drawSign(_signDt);
+  drawAllFurniture(getRgbColor());
+  for (const ag of Object.values(agents)) drawAgent(ag);
+}
+
+function loop(ts) {
+  const dt = Math.min(ts - _lastTs, 100);
+  _lastTs = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(ts => { _lastTs = ts; requestAnimationFrame(loop); });
+</script>
+</body>
+</html>
