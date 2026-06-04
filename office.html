@@ -37,7 +37,7 @@
 // ============================================================
 // CONSTANTS
 // ============================================================
-const W = 900, H = 580;
+const W = 900, H = 560;
 const S = 3; // pixel art scale: 1 unit = S canvas px
 
 const canvas = document.getElementById('office');
@@ -301,7 +301,6 @@ function drawAgent(agent) {
 // GAME LOOP
 // ============================================================
 let _lastTs = 0;
-let _rgbPhase = 0;
 
 // ============================================================
 // IDLE STATE MACHINE HELPERS
@@ -412,8 +411,6 @@ async function fetchEvents() {
 setInterval(fetchEvents, 500);
 
 function update(dt) {
-  _rgbPhase = (_rgbPhase + dt * 0.003) % (Math.PI * 6);
-
   for (const ag of Object.values(agents)) {
     // Advance walk frame animation
     if (ag.state !== 'idle_chill' && ag.state !== 'idle_phone') {
