@@ -146,6 +146,103 @@ function drawText(str, x, y, opts = {}) {
   ctx.restore();
 }
 
+function shadow(x, y, w, h) {
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  rect(x + 3, y + 3, w, h, '#000');
+  ctx.restore();
+}
+
+function drawDeskTopDown(x, y, w, h, color) {
+  shadow(x, y, w, h);
+  rect(x, y, w, h, color);
+  rect(x, y, w, 4, 'rgba(0,0,0,0.27)');
+  rect(x, y, 4, h, 'rgba(255,255,255,0.09)');
+}
+
+function drawChairTopDown(x, y, color) {
+  shadow(x, y, 22, 22);
+  rect(x, y, 22, 22, color);
+  rect(x + 3, y + 3, 16, 16, 'rgba(0,0,0,0.2)');
+  rect(x + 7, y + 7, 8, 8, 'rgba(0,0,0,0.33)');
+}
+
+function drawPlantTopDown(x, y) {
+  shadow(x, y, 20, 20);
+  rect(x, y, 20, 20, C.plantDark);
+  rect(x + 3, y + 3, 6, 6, C.plantLight);
+  rect(x + 11, y + 3, 6, 6, C.plantLight);
+  rect(x + 7, y + 10, 6, 6, C.plantLight);
+}
+
+function drawBookshelfTopDown(x, y, w, h) {
+  shadow(x, y, w, h);
+  rect(x, y, w, h, C.bookshelf);
+  const bw = Math.floor((w - 12) / 4);
+  const colors = ['#8b1a1a', '#1a4a8b', '#1a7a1a', '#8b6a1a'];
+  for (let i = 0; i < 4; i++) {
+    rect(x + 4 + i * (bw + 1), y + 3, bw, h - 6, colors[i]);
+  }
+}
+
+function drawGamingDeskTopDown(x, y, w, h) {
+  shadow(x, y, w, h);
+  rect(x, y, w, h, C.deskGaming);
+  rect(x, y, w, 3, '#4d4d8a');
+  rect(x, y, 3, h, '#4d4d8a');
+  rect(x + 2, y + h - 3, w - 4, 3, C.purple);
+}
+
+function drawGamingChairTopDown(x, y) {
+  shadow(x, y, 26, 28);
+  rect(x, y, 26, 28, '#8b0000');
+  rect(x + 3, y + 3, 20, 20, '#1a1a1a');
+  rect(x + 7, y + 7, 12, 10, '#8b0000');
+}
+
+function drawServerRackTopDown(x, y) {
+  shadow(x, y, 28, 55);
+  rect(x, y, 28, 55, C.serverRack);
+  for (let i = 0; i < 5; i++) {
+    rect(x + 3, y + 4 + i * 10, 22, 7, '#1a3a6b');
+    rect(x + 20, y + 6 + i * 10, 4, 3, '#22c55e');
+  }
+}
+
+function drawSofaTopDown(x, y, w, h) {
+  shadow(x, y, w, h);
+  rect(x, y, w, h, C.sofaBlue);
+  rect(x + 4, y + 4, w - 8, h - 8, C.sofaDark);
+  rect(x, y, w, 6, C.sofaBlue);
+  rect(x, y, 6, h, C.sofaDark);
+  rect(x + w - 6, y, 6, h, C.sofaDark);
+}
+
+function drawCoffeeMachineTopDown(x, y) {
+  shadow(x, y, 28, 28);
+  rect(x, y, 28, 28, C.coffeeM);
+  rect(x + 4, y + 4, 20, 12, '#1a1a1a');
+  rect(x + 10, y + 18, 8, 6, '#f5f0e0');
+  rect(x + 13, y + 20, 4, 4, '#6b3a2a');
+  rect(x + 22, y + 10, 4, 4, C.amber);
+}
+
+function drawCoffeeTableTopDown(x, y, w, h) {
+  shadow(x, y, w, h);
+  rect(x, y, w, h, '#3a2a1a');
+  rect(x + 4, y + 4, w - 8, h - 8, '#4a3a2a');
+}
+
+function drawRugTopDown(x, y, w, h) {
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  rect(x, y, w, h, C.rugWarm);
+  ctx.strokeStyle = '#5a3f28';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
+  ctx.restore();
+}
+
 function drawHeader() {
   rect(0, 0, W, HEADER_H, C.headerBg);
   ctx.strokeStyle = C.gold;
@@ -199,7 +296,50 @@ function drawAllRooms() {
   }
 }
 
-function drawAllFurniture() { /* filled in Tasks 3-5 */ }
+function drawAllFurniture() {
+  // ── BOSS ROOM ──
+  const br = ROOMS.boss;
+  drawBookshelfTopDown(br.x + 260, br.y + WALL + 4, 120, 20);
+  drawDeskTopDown(br.x + 25, br.y + 60, 150, 55, C.deskWalnut);
+  rect(br.x + 55, br.y + 67, 38, 26, '#1a2a3a');
+  rect(br.x + 57, br.y + 69, 34, 22, '#0f2035');
+  rect(br.x + 72, br.y + 93, 8, 5, '#555');
+  drawChairTopDown(br.x + 55, br.y + 130, '#4a3a2a');
+  drawChairTopDown(br.x + 100, br.y + 130, '#4a3a2a');
+  drawPlantTopDown(br.x + ROOM_W - 40, br.y + WALL + 6);
+
+  // ── DEV ROOM ──
+  const dr = ROOMS.dev;
+  drawGamingDeskTopDown(dr.x + 30, dr.y + 60, 95, 50);
+  rect(dr.x + 40, dr.y + 67, 40, 28, '#1a2a3a');
+  rect(dr.x + 42, dr.y + 69, 36, 24, '#0f2035');
+  drawGamingChairTopDown(dr.x + 45, dr.y + 125);
+  drawGamingDeskTopDown(dr.x + 200, dr.y + 60, 95, 50);
+  rect(dr.x + 210, dr.y + 67, 40, 28, '#1a2a3a');
+  rect(dr.x + 212, dr.y + 69, 36, 24, '#0f2035');
+  drawGamingChairTopDown(dr.x + 215, dr.y + 125);
+  drawServerRackTopDown(dr.x + ROOM_W - 45, dr.y + WALL + 10);
+
+  // ── OPS ROOM ──
+  const or = ROOMS.ops;
+  drawGamingDeskTopDown(or.x + 25, or.y + 55, 95, 50);
+  rect(or.x + 35, or.y + 62, 40, 28, '#1a2a3a');
+  rect(or.x + 37, or.y + 64, 36, 24, '#001a00');
+  drawGamingChairTopDown(or.x + 40, or.y + 120);
+  rect(or.x + 170, or.y + WALL + 6, 60, 20, '#111');
+  rect(or.x + 172, or.y + WALL + 8, 56, 16, '#001a00');
+  rect(or.x + 260, or.y + WALL + 6, 60, 20, '#111');
+  rect(or.x + 262, or.y + WALL + 8, 56, 16, '#001a00');
+
+  // ── LOUNGE ──
+  const lg = ROOMS.lounge;
+  drawRugTopDown(lg.x + 60, lg.y + 80, 130, 90);
+  drawSofaTopDown(lg.x + 65, lg.y + 85, 120, 38);
+  drawCoffeeTableTopDown(lg.x + 95, lg.y + 135, 55, 30);
+  drawCoffeeMachineTopDown(lg.x + ROOM_W - 45, lg.y + WALL + 10);
+  drawPlantTopDown(lg.x + WALL + 8, lg.y + WALL + 8);
+  drawPlantTopDown(lg.x + ROOM_W - 38, lg.y + ROOM_H - 38);
+}
 
 function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = null) {
   const colorMap = {
