@@ -116,6 +116,54 @@ const IDLE_POS = {
 const CENTER_POS = { x: 450, y: 300 };
 const WALK = { x: 15, y: 55, maxX: 885, maxY: 545 };
 
+const NAV_OBSTACLES = [
+  { x: 25,  y: 60,  w: 150, h: 55 },
+  { x: 55,  y: 130, w: 22,  h: 22 },
+  { x: 100, y: 130, w: 22,  h: 22 },
+  { x: 260, y: 44,  w: 120, h: 20 },
+  { x: 480, y: 60,  w: 95,  h: 50 },
+  { x: 650, y: 60,  w: 95,  h: 50 },
+  { x: 845, y: 50,  w: 28,  h: 55 },
+  { x: 25,  y: 355, w: 95,  h: 50 },
+  { x: 515, y: 385, w: 120, h: 38 },
+  { x: 545, y: 435, w: 55,  h: 30 },
+  { x: 835, y: 310, w: 28,  h: 28 },
+];
+
+function isInsideObstacle(x, y, pad = 10) {
+  return NAV_OBSTACLES.some(o =>
+    x >= o.x - pad && x <= o.x + o.w + pad &&
+    y >= o.y - pad && y <= o.y + o.h + pad
+  );
+}
+
+function pathBlocked(x1, y1, x2, y2, steps = 8) {
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (isInsideObstacle(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 8)) return true;
+  }
+  return false;
+}
+
+function getWaypoint(from, to) {
+  for (const obs of NAV_OBSTACLES) {
+    if (!pathBlocked(from.x, from.y, to.x, to.y)) continue;
+    const pad = 18;
+    const corners = [
+      { x: obs.x - pad, y: obs.y - pad },
+      { x: obs.x + obs.w + pad, y: obs.y - pad },
+      { x: obs.x - pad, y: obs.y + obs.h + pad },
+      { x: obs.x + obs.w + pad, y: obs.y + obs.h + pad },
+    ];
+    corners.sort((a, b) =>
+      Math.hypot(a.x - from.x, a.y - from.y) -
+      Math.hypot(b.x - from.x, b.y - from.y)
+    );
+    return corners[0];
+  }
+  return null;
+}
+
 // ============================================================
 // DRAW HELPERS
 // ============================================================
@@ -578,6 +626,7 @@ const agents = {
   jamesmie: {
     name: 'Jamesmie', color: C.jamesGold,
     hairColor: '#1a0a00', sprites: SPRITES_JAMESMIE, _lastDY: 1,
+    _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 100, y: 320 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -589,6 +638,7 @@ const agents = {
   reader: {
     name: 'Reader', color: C.readerBlue,
     hairColor: '#8b4513', sprites: SPRITES_READER, _lastDY: 1,
+    _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 350, y: 300 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -600,6 +650,7 @@ const agents = {
   coder: {
     name: 'Coder', color: C.coderGreen,
     hairColor: '#1a237e', sprites: SPRITES_CODER, _lastDY: 1,
+    _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 500, y: 340 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -611,6 +662,7 @@ const agents = {
   searcher: {
     name: 'Searcher', color: C.searchOrange,
     hairColor: '#6b0f1a', sprites: SPRITES_SEARCHER, _lastDY: 1,
+    _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 200, y: 380 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -629,11 +681,15 @@ function distTo(agent, target) {
 }
 
 function moveToward(agent, target, dt) {
-  const dx = target.x - agent.pos.x;
-  const dy = target.y - agent.pos.y;
+  agent._lastDY = target.y - agent.pos.y;
+  const goal = agent._waypoint || target;
+  const dx = goal.x - agent.pos.x;
+  const dy = goal.y - agent.pos.y;
   const d = Math.hypot(dx, dy);
-  agent._lastDY = dy;
-  if (d < 2) return true; // arrived
+  if (d < 4) {
+    if (agent._waypoint) { agent._waypoint = null; return false; }
+    return true;
+  }
   const step = agent.speed * dt / 1000;
   agent.pos.x += (dx / d) * Math.min(step, d);
   agent.pos.y += (dy / d) * Math.min(step, d);
@@ -744,20 +800,22 @@ let _chatCheckTimer = 0;
 
 function _checkChat() {
   const idleList = Object.values(agents).filter(ag =>
-    ag !== agents.jamesmie && ag.state.startsWith('idle') && ag.state !== 'idle_chat'
+    ag !== agents.jamesmie &&
+    ag.state.startsWith('idle') &&
+    ag.state !== 'idle_chat' &&
+    ag.state !== 'idle_chat_walk'
   );
   for (let i = 0; i < idleList.length; i++) {
     for (let j = i + 1; j < idleList.length; j++) {
       const a = idleList[i], b = idleList[j];
-      const dist = Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y);
-      if (dist < 80 && Math.random() < 0.30) {
+      if (Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y) < 80 && Math.random() < 0.30) {
         const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
-        a.speechText = phrase;
-        a.speechTimer = 3500;
-        b.speechText = '😄';
-        b.speechTimer = 3500;
-        a.facingLeft = a.pos.x > b.pos.x;
-        b.facingLeft = b.pos.x > a.pos.x;
+        const midX = (a.pos.x + b.pos.x) / 2;
+        const midY = (a.pos.y + b.pos.y) / 2;
+        a.state = 'idle_chat_walk'; a.targetPos = { x: midX - 24, y: midY };
+        a._chatPhrase = phrase; a._chatMidX = midX; a.speechText = '';
+        b.state = 'idle_chat_walk'; b.targetPos = { x: midX + 24, y: midY };
+        b._chatPhrase = '😄'; b._chatMidX = midX; b.speechText = '';
       }
     }
   }
@@ -865,10 +923,14 @@ function update(dt) {
 
     if (ag.state === 'idle_wander') {
       if (!ag.targetPos) {
-        ag.targetPos = {
-          x: WALK.x + Math.random() * (WALK.maxX - WALK.x),
-          y: WALK.y + Math.random() * (WALK.maxY - WALK.y),
-        };
+        let px, py, attempts = 0;
+        do {
+          px = WALK.x + Math.random() * (WALK.maxX - WALK.x);
+          py = WALK.y + Math.random() * (WALK.maxY - WALK.y);
+          attempts++;
+        } while (isInsideObstacle(px, py) && attempts < 20);
+        ag.targetPos = { x: px, y: py };
+        ag._waypoint = getWaypoint(ag.pos, ag.targetPos);
         ag.idleDuration = 3000 + Math.random() * 8000;
       }
       const arrived = moveToward(ag, ag.targetPos, dt);
@@ -940,6 +1002,23 @@ function update(dt) {
           ag.targetPos = null;
           ag.state = _pickIdleState();
         }
+      }
+    }
+
+    else if (ag.state === 'idle_chat_walk') {
+      const arrived = moveToward(ag, ag.targetPos, dt);
+      if (arrived) {
+        ag.state = 'idle_chat';
+        ag.speechText = ag._chatPhrase;
+        ag.speechTimer = 3500;
+        ag.facingLeft = ag.pos.x > ag._chatMidX;
+        ag.idleTimer = 0;
+      }
+    }
+    else if (ag.state === 'idle_chat') {
+      if (ag.speechTimer <= 0) {
+        ag.state = 'idle_wander'; ag.targetPos = null;
+        ag._chatPhrase = ''; ag.idleTimer = 0;
       }
     }
   }
