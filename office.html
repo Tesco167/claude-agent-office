@@ -577,6 +577,7 @@ const SPRITES_SEARCHER = {
 const agents = {
   jamesmie: {
     name: 'Jamesmie', color: C.jamesGold,
+    hairColor: '#1a0a00', sprites: SPRITES_JAMESMIE, _lastDY: 1,
     pos: { x: 100, y: 320 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -587,6 +588,7 @@ const agents = {
   },
   reader: {
     name: 'Reader', color: C.readerBlue,
+    hairColor: '#8b4513', sprites: SPRITES_READER, _lastDY: 1,
     pos: { x: 350, y: 300 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -597,6 +599,7 @@ const agents = {
   },
   coder: {
     name: 'Coder', color: C.coderGreen,
+    hairColor: '#1a237e', sprites: SPRITES_CODER, _lastDY: 1,
     pos: { x: 500, y: 340 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -607,6 +610,7 @@ const agents = {
   },
   searcher: {
     name: 'Searcher', color: C.searchOrange,
+    hairColor: '#6b0f1a', sprites: SPRITES_SEARCHER, _lastDY: 1,
     pos: { x: 200, y: 380 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
@@ -628,6 +632,7 @@ function moveToward(agent, target, dt) {
   const dx = target.x - agent.pos.x;
   const dy = target.y - agent.pos.y;
   const d = Math.hypot(dx, dy);
+  agent._lastDY = dy;
   if (d < 2) return true; // arrived
   const step = agent.speed * dt / 1000;
   agent.pos.x += (dx / d) * Math.min(step, d);
@@ -641,7 +646,7 @@ function moveToward(agent, target, dt) {
 // ============================================================
 function drawBubble(agent, text_, isTask) {
   const bx = agent.pos.x;
-  const by = agent.pos.y - 24 * S - 14;
+  const by = agent.pos.y - 20 * S - 14;
   ctx.save();
   ctx.font = '12px "Leelawadee UI","Tahoma",sans-serif';
   const measured = ctx.measureText(text_).width;
@@ -677,9 +682,38 @@ function drawBubble(agent, text_, isTask) {
   ctx.restore();
 }
 
-// drawAgent — will be implemented in Task 2 (top-down sprites)
 function drawAgent(agent) {
-  // stub: filled in Task 2
+  const sprW = 16 * S;
+  const sprH = 20 * S;
+  const x = Math.round(agent.pos.x - sprW / 2);
+  const y = Math.round(agent.pos.y - sprH);
+
+  const facing = (agent._lastDY < 0) ? 'up' : 'down';
+  const spr = agent.sprites[facing];
+
+  let grid;
+  if (agent.state === 'idle_chill' || agent.state === 'idle_phone') {
+    grid = spr.stand;
+  } else {
+    const wf = [spr.stand, spr.walk1, spr.stand, spr.walk2];
+    grid = wf[agent.frameIdx];
+  }
+
+  drawSprite(grid, x, y, agent.color, agent.facingLeft, agent.hairColor);
+
+  const labelFont = '11px "Leelawadee UI","Tahoma",sans-serif';
+  ctx.font = labelFont;
+  const nameW = ctx.measureText(agent.name).width;
+  drawText(agent.name, agent.pos.x, y - 8, {
+    size: 11, color: C.white, align: 'center', shadow: '#000', shadowBlur: 4,
+  });
+  ctx.save();
+  ctx.fillStyle = agent.color;
+  ctx.beginPath();
+  ctx.arc(agent.pos.x - nameW / 2 - 8, y - 8, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
   if (agent.taskLabel)  drawBubble(agent, agent.taskLabel, true);
   if (agent.speechText) drawBubble(agent, agent.speechText, false);
 }
