@@ -378,6 +378,200 @@ function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = nul
 
 
 // ============================================================
+// TOP-DOWN SPRITE PARTS
+// ============================================================
+const LEGS_TD_STAND = [
+  '....ll..ll......',
+  '....ll..ll......',
+  '....ll..ll......',
+  '....zz..zz......',
+  '...zzz..zzz.....',
+];
+const LEGS_TD_WALK1 = [
+  '...lll...ll.....',
+  '..llll...ll.....',
+  '..lll....ll.....',
+  '..zz.....ll.....',
+  '..zzz....zzz....',
+];
+const LEGS_TD_WALK2 = [
+  '....ll...lll....',
+  '....ll...llll...',
+  '....ll....lll...',
+  '....ll....zz....',
+  '...zzz....zzz...',
+];
+
+const JAMESMIE_UPPER_DOWN = [
+  '....ccccccc.....',  // 0 crown
+  '....hhhhhh......',  // 1
+  '....hsssssh.....',  // 2
+  '....hse.esh.....',  // 3 eyes
+  '....hsssssh.....',  // 4
+  '.....wwwww......',  // 5 white collar
+  '...bwwwwwbb.....',  // 6 suit+collar
+  '..bbbbbbbbb.....',  // 7 shoulders
+  '..sbbbbbbbbs....',  // 8 hands
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14 belt
+];
+
+const READER_UPPER_DOWN = [
+  '....hhhhhh......',  // 0
+  '...hhsssshhh....',  // 1
+  '...hhse.eshhh...',  // 2 eyes
+  '...hhsssshhh....',  // 3
+  '...hhhhhhhh.....',  // 4
+  '...hh.wwww.hh...',  // 5 collar+hair
+  '..hhbbbbbbbhh...',  // 6 hair over shoulders
+  '..hbbbbbbbbhh...',  // 7 hair tapering
+  '....bbbbbbbb....',  // 8
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const CODER_UPPER_DOWN = [
+  '...h..hhh..h....',  // 0 spiky tips
+  '...hhhhhhhh.....',  // 1 hair base
+  '....hsssssh.....',  // 2
+  '....hse.esh.....',  // 3 eyes
+  '....hsssssh.....',  // 4
+  '....bbbbbb......',  // 5 hoodie collar
+  '...bbbbbbbb.....',  // 6 hoodie
+  '..bbbbbbbbbb....',  // 7 shoulders
+  '..sbbbbbbbbs....',  // 8 hands
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const SEARCHER_UPPER_DOWN = [
+  '....hhhhhh.h....',  // 0 asymmetric spike
+  '....hssssshh....',  // 1
+  '....hse.esh.....',  // 2 eyes
+  '....hsssssh.....',  // 3
+  '....hssessh.....',  // 4 mouth
+  '.....sssss......',  // 5 neck
+  '..wbbbbbbbbw....',  // 6 jacket lapels
+  '..wbbbbbbbbw....',  // 7
+  '..wsbbbbbbbw....',  // 8 hands+lapel
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const JAMESMIE_UPPER_UP = [
+  '....ccccccc.....',  // 0 crown visible from behind
+  '....hhhhhh......',  // 1
+  '....hhhhhh......',  // 2 back of head
+  '....hhhhhh......',  // 3
+  '....hhhhhhh.....',  // 4
+  '....hhhhhh......',  // 5
+  '...bbbbbbbbb....',  // 6 shoulders
+  '..bbbbbbbbb.....',  // 7
+  '..sbbbbbbbbs....',  // 8
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const READER_UPPER_UP = [
+  '...hhhhhhhh.....',  // 0 wide hair from behind
+  '...hhhhhhhh.....',  // 1
+  '...hhhhhhhhh....',  // 2
+  '...hhhhhhhh.....',  // 3
+  '...hhhhhhhhh....',  // 4
+  '...hh....hh.....',  // 5 hair strands
+  '..hhbbbbbbbhh...',  // 6
+  '..hbbbbbbbbhh...',  // 7
+  '....bbbbbbbb....',  // 8
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const CODER_UPPER_UP = [
+  '...h..hhh..h....',  // 0 spiky tips from behind
+  '...hhhhhhhh.....',  // 1
+  '...hhhhhhhh.....',  // 2 back of head
+  '...hhhhhhhh.....',  // 3
+  '....hhhhhhh.....',  // 4
+  '....bbbbbb......',  // 5
+  '...bbbbbbbb.....',  // 6
+  '..bbbbbbbbbb....',  // 7
+  '..sbbbbbbbbs....',  // 8
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const SEARCHER_UPPER_UP = [
+  '....hhhhhh.h....',  // 0 asymmetric spike from behind
+  '....hhhhhhhh....',  // 1
+  '....hhhhhh......',  // 2 back of head
+  '....hhhhhh......',  // 3
+  '....hhhhhhh.....',  // 4
+  '.....sssss......',  // 5 neck
+  '..wbbbbbbbbw....',  // 6
+  '..wbbbbbbbbw....',  // 7
+  '..wsbbbbbbbw....',  // 8
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const SPRITES_JAMESMIE = {
+  down: {
+    stand: [...JAMESMIE_UPPER_DOWN, ...LEGS_TD_STAND],
+    walk1: [...JAMESMIE_UPPER_DOWN, ...LEGS_TD_WALK1],
+    walk2: [...JAMESMIE_UPPER_DOWN, ...LEGS_TD_WALK2],
+  },
+  up: {
+    stand: [...JAMESMIE_UPPER_UP, ...LEGS_TD_STAND],
+    walk1: [...JAMESMIE_UPPER_UP, ...LEGS_TD_WALK1],
+    walk2: [...JAMESMIE_UPPER_UP, ...LEGS_TD_WALK2],
+  },
+};
+const SPRITES_READER = {
+  down: { stand: [...READER_UPPER_DOWN, ...LEGS_TD_STAND], walk1: [...READER_UPPER_DOWN, ...LEGS_TD_WALK1], walk2: [...READER_UPPER_DOWN, ...LEGS_TD_WALK2] },
+  up:   { stand: [...READER_UPPER_UP,   ...LEGS_TD_STAND], walk1: [...READER_UPPER_UP,   ...LEGS_TD_WALK1], walk2: [...READER_UPPER_UP,   ...LEGS_TD_WALK2] },
+};
+const SPRITES_CODER = {
+  down: { stand: [...CODER_UPPER_DOWN, ...LEGS_TD_STAND], walk1: [...CODER_UPPER_DOWN, ...LEGS_TD_WALK1], walk2: [...CODER_UPPER_DOWN, ...LEGS_TD_WALK2] },
+  up:   { stand: [...CODER_UPPER_UP,   ...LEGS_TD_STAND], walk1: [...CODER_UPPER_UP,   ...LEGS_TD_WALK1], walk2: [...CODER_UPPER_UP,   ...LEGS_TD_WALK2] },
+};
+const SPRITES_SEARCHER = {
+  down: { stand: [...SEARCHER_UPPER_DOWN, ...LEGS_TD_STAND], walk1: [...SEARCHER_UPPER_DOWN, ...LEGS_TD_WALK1], walk2: [...SEARCHER_UPPER_DOWN, ...LEGS_TD_WALK2] },
+  up:   { stand: [...SEARCHER_UPPER_UP,   ...LEGS_TD_STAND], walk1: [...SEARCHER_UPPER_UP,   ...LEGS_TD_WALK1], walk2: [...SEARCHER_UPPER_UP,   ...LEGS_TD_WALK2] },
+};
+
+// ============================================================
 // AGENT OBJECTS
 // ============================================================
 const agents = {
