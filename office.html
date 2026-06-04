@@ -146,7 +146,60 @@ function drawText(str, x, y, opts = {}) {
   ctx.restore();
 }
 
+function drawHeader() {
+  rect(0, 0, W, HEADER_H, C.headerBg);
+  ctx.strokeStyle = C.gold;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W - 2, HEADER_H - 2);
+  const hx = W / 2 - 130, hy = HEADER_H / 2;
+  ctx.fillStyle = C.gold;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy - 10); ctx.lineTo(hx - 9, hy); ctx.lineTo(hx + 9, hy);
+  ctx.closePath(); ctx.fill();
+  rect(hx - 6, hy, 12, 8, C.gold);
+  rect(hx - 2, hy + 3, 4, 5, C.brand);
+  drawText('ส. ขอนแก่น AI Office', W / 2, HEADER_H / 2, {
+    size: 18, weight: 'bold', color: C.white, shadow: C.gold, shadowBlur: 10,
+  });
+}
 
+function drawAllRooms() {
+  for (const r of Object.values(ROOMS)) {
+    rect(r.x, r.y, r.w, r.h, r.floor);
+  }
+  ctx.strokeStyle = C.wallOuter;
+  ctx.lineWidth = WALL;
+  ctx.strokeRect(WALL / 2, HEADER_H + WALL / 2, W - WALL, 520 - WALL);
+
+  const vx = ROOM_W;
+  const vDoor1Y = HEADER_H + ROOM_H / 2;
+  const vDoor2Y = HEADER_H + ROOM_H + ROOM_H / 2;
+  ctx.fillStyle = C.wallOuter;
+  rect(vx - WALL / 2, HEADER_H, WALL, vDoor1Y - DOOR_W / 2 - HEADER_H);
+  rect(vx - WALL / 2, vDoor1Y + DOOR_W / 2, WALL, vDoor2Y - DOOR_W / 2 - vDoor1Y - DOOR_W / 2);
+  rect(vx - WALL / 2, vDoor2Y + DOOR_W / 2, WALL, HEADER_H + 520 - vDoor2Y - DOOR_W / 2);
+
+  const hy2 = HEADER_H + ROOM_H;
+  const hDoor1X = ROOM_W / 2;
+  const hDoor2X = ROOM_W + ROOM_W / 2;
+  ctx.fillStyle = C.wallOuter;
+  rect(0, hy2 - WALL / 2, hDoor1X - DOOR_W / 2, WALL);
+  rect(hDoor1X + DOOR_W / 2, hy2 - WALL / 2, hDoor2X - DOOR_W / 2 - hDoor1X - DOOR_W / 2, WALL);
+  rect(hDoor2X + DOOR_W / 2, hy2 - WALL / 2, W - hDoor2X - DOOR_W / 2, WALL);
+
+  ctx.strokeStyle = C.wallHighlight;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(WALL, HEADER_H + WALL, W - WALL * 2, 520 - WALL * 2);
+
+  for (const r of Object.values(ROOMS)) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    drawText(r.label, r.x + r.w / 2, r.y + 18, { size: 10, color: C.white, align: 'center' });
+    ctx.restore();
+  }
+}
+
+function drawAllFurniture() { /* filled in Tasks 3-5 */ }
 
 function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = null) {
   const colorMap = {
@@ -583,6 +636,11 @@ function update(dt) {
 
 function draw() {
   ctx.clearRect(0, 0, W, H);
+  drawAllRooms();
+  drawAllFurniture();
+  const sorted = Object.values(agents).sort((a, b) => a.pos.y - b.pos.y);
+  for (const ag of sorted) drawAgent(ag);
+  drawHeader();
 }
 
 function loop(ts) {
