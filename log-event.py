@@ -1,6 +1,7 @@
 import json, sys, os, time
 from pathlib import Path
 from urllib.parse import urlparse
+# Claude Code hook — maps tool calls to office agents
 
 TOOL_TO_AGENT = {
     'Read': 'reader', 'Glob': 'reader', 'Grep': 'reader',
@@ -34,6 +35,28 @@ def extract_label(tool_name, tool_input):
         return f"{icon} {host}"
     return f"{icon} {tool_name}"
 
+def last_assistant_text(transcript_path):
+    """Return the latest assistant text message from a JSONL transcript, or None."""
+    try:
+        lines = Path(transcript_path).read_text(encoding='utf-8').splitlines()
+    except Exception:
+        return None
+    for ln in reversed(lines):
+        try:
+            obj = json.loads(ln)
+        except Exception:
+            continue
+        if obj.get('type') != 'assistant':
+            continue
+        content = obj.get('message', {}).get('content', [])
+        if not isinstance(content, list):
+            continue
+        texts = [c.get('text') for c in content
+                 if isinstance(c, dict) and c.get('type') == 'text' and c.get('text')]
+        if texts:
+            return texts[-1]
+    return None
+
 def atomic_write(path, data):
     tmp = str(path) + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
@@ -46,7 +69,8 @@ def main():
     events_path = here / 'agent-events.json'
 
     try:
-        payload = json.load(sys.stdin)
+        raw = sys.stdin.buffer.read()
+        payload = json.loads(raw.decode('utf-8'))
     except Exception:
         sys.exit(0)
 
@@ -61,6 +85,14 @@ def main():
         text = (payload.get('prompt') or '')[:200]
         existing['user_message'] = {'text': text, 'timestamp': ts}
         atomic_write(events_path, existing)
+        sys.exit(0)
+
+    if mode == 'stop':
+        transcript_path = payload.get('transcript_path', '')
+        text = last_assistant_text(transcript_path)
+        if text:
+            existing['assistant_response'] = {'text': text[:200], 'timestamp': ts}
+            atomic_write(events_path, existing)
         sys.exit(0)
 
     tool_name = payload.get('tool_name', '')
@@ -80,6 +112,9 @@ def main():
             'status': 'active',
             'timestamp': ts,
         }
+        existing.setdefault('events', [])
+        existing['events'].append({'agent': agent, 'label': label, 'ts': ts})
+        existing['events'] = existing['events'][-10:]
     elif mode == 'post':
         if (existing.get('current')
                 and existing['current'].get('agent') == agent
