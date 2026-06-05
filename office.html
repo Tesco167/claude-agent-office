@@ -179,6 +179,18 @@ const NAV_OBSTACLES = [
   { x: 515, y: 385, w: 120, h: 38 },
   { x: 545, y: 435, w: 55,  h: 30 },
   { x: 835, y: 310, w: 28,  h: 28 },
+  // boss extras
+  { x: 30,  y: 235, w: 90,  h: 30 },   // boss guest sofa
+  { x: 195, y: 135, w: 30,  h: 60 },   // boss cabinet
+  // dev extras
+  { x: 858, y: 300, w: 26,  h: 30 },   // dev fridge
+  { x: 480, y: 300, w: 52,  h: 24 },   // dev crates
+  // ops extras
+  { x: 195, y: 410, w: 95,  h: 50 },   // ops second desk + chair
+  { x: 405, y: 350, w: 28,  h: 55 },   // ops extra rack (lower)
+  { x: 405, y: 425, w: 28,  h: 55 },   // ops extra rack
+  // lounge extras
+  { x: 464, y: 360, w: 24,  h: 110 },  // lounge bookshelf
 ];
 
 function isInsideObstacle(x, y, pad = 10) {
@@ -326,6 +338,56 @@ function drawCoffeeMachineTopDown(x, y) {
   rect(x + 22, y + 10, 4, 4, C.amber);
 }
 
+function drawWhiteboardTopDown(x, y, w) {
+  shadow(x, y, w, 18);
+  rect(x, y, w, 18, '#e8e8e8');
+  rect(x + 2, y + 2, w - 4, 14, '#f8f8f8');
+  rect(x + 6,  y + 5, 18, 2, '#2d6b8b');
+  rect(x + 28, y + 8, 24, 2, '#8b1a1a');
+  rect(x + 6,  y + 11, 30, 2, '#1a7a1a');
+  rect(x + w - 22, y + 5, 16, 8, '#444');
+}
+
+function drawCabinetTopDown(x, y, w, h) {
+  shadow(x, y, w, h);
+  rect(x, y, w, h, '#3a3a4a');
+  rect(x + 3, y + 3, w - 6, (h - 9) / 2, '#2a2a38');
+  rect(x + 3, y + 6 + (h - 9) / 2, w - 6, (h - 9) / 2, '#2a2a38');
+  rect(x + w / 2 - 2, y + 6, 4, 3, '#888');
+}
+
+function drawFridgeTopDown(x, y) {
+  shadow(x, y, 26, 30);
+  rect(x, y, 26, 30, '#d8dde2');
+  rect(x + 2, y + 2, 22, 12, '#c0c8d0');
+  rect(x + 2, y + 16, 22, 12, '#c0c8d0');
+  rect(x + 20, y + 5, 3, 6, '#888');
+}
+
+function drawTVTopDown(x, y, w) {
+  shadow(x, y, w, 20);
+  rect(x, y, w, 20, '#0a0a0a');
+  rect(x + 3, y + 3, w - 6, 14, '#1a2a4a');
+  rect(x + 6, y + 6, w - 12, 8, '#2d4a7a');
+}
+
+function drawMonitorPanelTopDown(x, y, w) {
+  shadow(x, y, w, 18);
+  rect(x, y, w, 18, '#0a1a0a');
+  for (let i = 0; i < 4; i++) {
+    rect(x + 4 + i * ((w - 8) / 4), y + 4, (w - 8) / 4 - 3, 10, '#0a2a0a');
+    rect(x + 6 + i * ((w - 8) / 4), y + 7, 6, 2, '#22c55e');
+  }
+}
+
+function drawCrateTopDown(x, y, s) {
+  shadow(x, y, s, s);
+  rect(x, y, s, s, '#5a4326');
+  rect(x + 2, y + 2, s - 4, s - 4, '#6b4f2d');
+  rect(x, y + s / 2 - 1, s, 2, '#3a2a16');
+  rect(x + s / 2 - 1, y, 2, s, '#3a2a16');
+}
+
 function drawCoffeeTableTopDown(x, y, w, h) {
   shadow(x, y, w, h);
   rect(x, y, w, h, '#3a2a1a');
@@ -406,6 +468,12 @@ function drawAllFurniture() {
   drawChairTopDown(br.x + 55, br.y + 130, '#4a3a2a');
   drawChairTopDown(br.x + 100, br.y + 130, '#4a3a2a');
   drawPlantTopDown(br.x + ROOM_W - 40, br.y + WALL + 6);
+  // boss extras
+  drawRugTopDown(br.x + 20, br.y + 55, 165, 65);
+  drawWhiteboardTopDown(br.x + 40, br.y + WALL + 4, 110);
+  drawSofaTopDown(br.x + 30, br.y + 195, 90, 30);
+  drawCoffeeTableTopDown(br.x + 50, br.y + 232, 50, 18);
+  drawCabinetTopDown(br.x + 195, br.y + 95, 30, 60);
 
   // ── DEV ROOM ──
   const dr = ROOMS.dev;
@@ -418,6 +486,12 @@ function drawAllFurniture() {
   rect(dr.x + 212, dr.y + 69, 36, 24, '#0f2035');
   drawGamingChairTopDown(dr.x + 215, dr.y + 125);
   drawServerRackTopDown(dr.x + ROOM_W - 45, dr.y + WALL + 10);
+  // dev extras
+  drawWhiteboardTopDown(dr.x + 110, dr.y + WALL + 4, 120);
+  drawFridgeTopDown(dr.x + ROOM_W - 42, dr.y + ROOM_H - 40);
+  drawCrateTopDown(dr.x + 30, dr.y + ROOM_H - 40, 24);
+  drawCrateTopDown(dr.x + 58, dr.y + ROOM_H - 36, 20);
+  drawPlantTopDown(dr.x + 150, dr.y + ROOM_H - 36);
 
   // ── OPS ROOM ──
   const or = ROOMS.ops;
@@ -429,6 +503,15 @@ function drawAllFurniture() {
   rect(or.x + 172, or.y + WALL + 8, 56, 16, '#001a00');
   rect(or.x + 260, or.y + WALL + 6, 60, 20, '#111');
   rect(or.x + 262, or.y + WALL + 8, 56, 16, '#001a00');
+  // ops extras: second workstation + extra racks + monitoring + crates
+  drawGamingDeskTopDown(or.x + 170, or.y + 55, 95, 50);
+  rect(or.x + 180, or.y + 62, 40, 28, '#1a2a3a');
+  rect(or.x + 182, or.y + 64, 36, 24, '#001a00');
+  drawGamingChairTopDown(or.x + 185, or.y + 120);
+  drawServerRackTopDown(or.x + ROOM_W - 45, or.y + WALL + 10);
+  drawServerRackTopDown(or.x + ROOM_W - 45, or.y + WALL + 75);
+  drawMonitorPanelTopDown(or.x + 340, or.y + WALL + 4, 95);
+  drawCrateTopDown(or.x + 300, or.y + ROOM_H - 38, 24);
 
   // ── LOUNGE ──
   const lg = ROOMS.lounge;
@@ -438,6 +521,10 @@ function drawAllFurniture() {
   drawCoffeeMachineTopDown(lg.x + ROOM_W - 45, lg.y + WALL + 10);
   drawPlantTopDown(lg.x + WALL + 8, lg.y + WALL + 8);
   drawPlantTopDown(lg.x + ROOM_W - 38, lg.y + ROOM_H - 38);
+  // lounge extras
+  drawTVTopDown(lg.x + 120, lg.y + WALL + 4, 130);
+  drawBookshelfTopDown(lg.x + WALL + 6, lg.y + 60, 24, 110);
+  drawPlantTopDown(lg.x + 250, lg.y + ROOM_H - 38);
 }
 
 function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = null) {
