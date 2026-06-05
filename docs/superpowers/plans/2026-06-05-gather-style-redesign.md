@@ -139,7 +139,7 @@ function drawHeader() {
   ctx.closePath(); ctx.fill();
   rect(hx - 6, hy, 12, 8, C.gold);
   rect(hx - 2, hy + 3, 4, 5, C.brand);
-  drawText('ส. ขอนแก่น AI Office', W / 2, HEADER_H / 2, {
+  drawText('AI Office', W / 2, HEADER_H / 2, {
     size: 18, weight: 'bold', color: C.white, shadow: C.gold, shadowBlur: 10,
   });
 }
