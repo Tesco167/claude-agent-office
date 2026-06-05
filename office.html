@@ -1312,7 +1312,7 @@ function drawAgent(agent) {
     (agent.state === 'jamesmie_flow' && agent._jPhase && agent._jPhase !== 'walking_desk');
 
   let facing = (agent._lastDY < 0) ? 'up' : 'down';
-  if (seated) facing = 'down';
+  if (seated) facing = 'up';   // seated at desk → face the desk/monitor (back to viewer)
   const spr = agent.sprites[facing];
 
   let grid;
