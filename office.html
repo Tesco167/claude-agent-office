@@ -844,18 +844,18 @@ let _lastJamesmieTs = 0;
 
 function triggerJamesmie(text, ts) {
   if (!ts || ts <= _lastJamesmieTs) return;
-  // Don't interrupt an active tool
   const jam = agents.jamesmie;
   if (jam.state === 'working' || jam.state === 'walking_to_desk') return;
   _lastJamesmieTs = ts;
 
   const truncated = text.length > 40 ? text.slice(0, 39) + '…' : text;
-  jam.state = 'jamesmie_stand';
+  jam.state = 'jamesmie_flow';
   jam._jMsg = truncated;
-  jam._jPhase = 'walking_center';
+  jam._jPhase = 'walking_desk';
   jam._jTimer = 0;
-  jam.targetPos = { ...CENTER_POS };
+  jam.targetPos = { ...SIT_POS.jamesmie };
   jam.speechText = '';
+  jam.taskLabel = '';
   jam._idleInit = false;
 }
 
@@ -1094,42 +1094,50 @@ function update(dt) {
     }
     // 'done_flash' state: _doneTimer handled in the timer tick block above
   }
-  // ---- JAMESMIE ACTIVE FLOW ----
+  // ---- JAMESMIE DELEGATION FLOW ----
   const jam = agents.jamesmie;
-  if (jam.state === 'jamesmie_stand') {
+  if (jam.state === 'jamesmie_flow') {
     jam._jTimer += dt;
 
-    if (jam._jPhase === 'walking_center') {
-      const arrived = moveToward(jam, CENTER_POS, dt);
+    if (jam._jPhase === 'walking_desk') {
+      const arrived = moveToward(jam, SIT_POS.jamesmie, dt);
       if (arrived) {
         jam._jPhase = 'speaking';
         jam._jTimer = 0;
-        jam.speechText = jam._jMsg;
-        jam.speechTimer = 3200;
-        // Other agents face Jamesmie
-        for (const ag of Object.values(agents)) {
-          if (ag !== jam && ag.state.startsWith('idle')) {
-            ag.facingLeft = ag.pos.x > CENTER_POS.x;
-          }
-        }
+        jam._lastDY = 1;               // face down (seated)
+        jam.speechText = jam._jMsg;    // your voice
+        jam.speechTimer = 3000;
       }
     }
-
-    if (jam._jPhase === 'speaking' && jam._jTimer > 3500) {
-      jam._jPhase = 'returning';
-      jam._jTimer = 0;
-      jam.targetPos = { ...WORK_POS.jamesmie };
+    else if (jam._jPhase === 'speaking') {
+      if (jam._jTimer > 3000) {
+        jam._jPhase = 'thinking';
+        jam._jTimer = 0;
+        jam._thinkDots = 0;
+        jam.speechText = '💭';
+      }
     }
-
-    if (jam._jPhase === 'returning') {
-      const home = moveToward(jam, WORK_POS.jamesmie, dt);
-      if (home) {
-        jam.state = 'idle_wander';
-        jam.targetPos = null;
+    else if (jam._jPhase === 'thinking') {
+      // animate dots: . .. ...
+      jam._thinkDots = (jam._thinkDots || 0) + dt;
+      const n = 1 + (Math.floor(jam._thinkDots / 400) % 3);
+      jam.speechText = '💭' + '.'.repeat(n);
+      jam.speechTimer = 500;
+      if (jam._jTimer > 2000) {
+        jam._jPhase = 'dispatch';
+        jam._jTimer = 0;
+        jam.taskLabel = '📋 สั่งงาน!';
+        // face toward the team (dev room is to the right)
+        jam.facingLeft = false;
+      }
+    }
+    else if (jam._jPhase === 'dispatch') {
+      if (jam._jTimer > 1500) {
         jam._jPhase = null;
-        jam._jMsg = '';
-        jam._idleInit = false;
-        jam.idleTimer = 0;
+        jam.taskLabel = '';
+        jam.speechText = '';
+        jam.state = 'working';   // settle into seated working pose
+        jam._workTimer = 4000;
       }
     }
   }
