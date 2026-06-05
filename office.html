@@ -1601,10 +1601,73 @@ function drawDeskFronts() {
   }
 }
 
+// Subtle tiled floor per room — drawn over the floor fill, under furniture.
+function drawFloors() {
+  for (const r of Object.values(ROOMS)) {
+    const x0 = r.x + WALL, y0 = r.y + 28, x1 = r.x + r.w - WALL, y1 = r.y + r.h - WALL;
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let gx = x0 + 18; gx < x1; gx += 36) { ctx.moveTo(gx, y0); ctx.lineTo(gx, y1); }
+    for (let gy = y0 + 18; gy < y1; gy += 36) { ctx.moveTo(x0, gy); ctx.lineTo(x1, gy); }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Screen content + glow, desk accessories, and wall decor — over furniture, under agents.
+function drawDetails() {
+  const SCREENS = [
+    { x: 57,  y: 109, w: 34, h: 22, k: 'code' },  // boss
+    { x: 492, y: 109, w: 36, h: 24, k: 'code' },  // dev 1
+    { x: 662, y: 109, w: 36, h: 24, k: 'code' },  // dev 2
+    { x: 785, y: 109, w: 36, h: 24, k: 'code' },  // dev 3 (writer)
+    { x: 37,  y: 364, w: 36, h: 24, k: 'term' },  // ops 1
+    { x: 182, y: 364, w: 36, h: 24, k: 'term' },  // ops 2
+  ];
+  const CODE = ['#e06c75', '#61afef', '#98c379', '#c678dd', '#e5c07b'];
+  for (const s of SCREENS) {
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    glow(s.x + s.w / 2, s.y + s.h / 2, s.w * 0.9,
+         s.k === 'term' ? 'rgba(34,197,94,0.5)' : 'rgba(80,140,240,0.5)');
+    ctx.restore();
+    if (s.k === 'term') {
+      for (let i = 0; i < 4; i++) rect(s.x + 3, s.y + 3 + i * 5, (i % 2 ? 12 : 22), 2, '#1aff6a');
+    } else {
+      for (let i = 0; i < 5; i++) rect(s.x + 3, s.y + 3 + i * 4, 8 + (i * 11 % 22), 2, CODE[i % 5]);
+    }
+    // keyboard + mug on the desk in front of the screen
+    const kcx = s.x + s.w / 2, ky = s.y + s.h + 3;
+    rect(kcx - 13, ky, 26, 8, '#15151f');
+    for (let rr = 0; rr < 2; rr++) for (let cc = 0; cc < 6; cc++) rect(kcx - 11 + cc * 4, ky + 2, 2, 2, '#3a3a4a');
+    rect(s.x + s.w + 3, s.y + 4, 6, 6, '#d05a3a');           // mug
+    rect(s.x + s.w + 4, s.y + 5, 4, 3, '#f0e0c0');
+  }
+
+  // wall decor: clocks + a framed poster
+  function clock(x, y) {
+    rect(x, y, 14, 14, '#15151a'); rect(x + 1, y + 1, 12, 12, '#e8e8e8');
+    rect(x + 6, y + 3, 2, 4, '#15151a'); rect(x + 7, y + 7, 4, 2, '#15151a');
+  }
+  function frame(x, y, w, h, col) {
+    rect(x, y, w, h, '#3a2a1a'); rect(x + 2, y + 2, w - 4, h - 4, col);
+    rect(x + 2, y + 2, w - 4, 2, 'rgba(255,255,255,0.22)');
+  }
+  clock(ROOMS.boss.x + 200, ROOMS.boss.y + WALL + 4);
+  clock(ROOMS.dev.x + 300, ROOMS.dev.y + WALL + 6);
+  frame(ROOMS.lounge.x + 36, ROOMS.lounge.y + WALL + 4, 30, 22, '#2d6b8b');
+  frame(ROOMS.ops.x + 130, ROOMS.ops.y + WALL + 4, 26, 20, '#6b2d6b');
+}
+
 function draw() {
   ctx.clearRect(0, 0, W, H);
   drawAllRooms();
+  drawFloors();
   drawAllFurniture();
+  drawDetails();
   const sorted = Object.values(agents).sort((a, b) => a.pos.y - b.pos.y);
   for (const ag of sorted) drawAgent(ag);
   drawDeskFronts();
