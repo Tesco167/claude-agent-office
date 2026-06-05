@@ -555,10 +555,12 @@ function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = nul
     'z': C.shoe,
     'd': shadeHex(C.skin, 0.88),     // skin shadow
     'm': '#b56b5a',                  // mouth
-    'g': '#1a1a1a',                  // glasses / dark detail
+    'g': '#1a1a1a',                  // dark detail
+    'G': '#9aa0a8',                  // glasses frame (light gray)
+    'i': '#f0f0f0',                  // eye white
     'H': shadeHex(hair, 0.72),       // hair shadow
-    'k': shadeHex(bodyColor, 0.74),  // body shadow
-    'B': shadeHex(bodyColor, 1.18),  // body highlight
+    'k': shadeHex(bodyColor, 0.66),  // body shadow
+    'B': shadeHex(bodyColor, 1.28),  // body highlight
   };
   const cols = grid[0].length;
   const rows = grid.length;
@@ -837,21 +839,21 @@ const READER2_UPPER_DOWN = [
   '....hhhHHHHHHHHHHhhh....',
   '....hhhssssssssssHhh....',
   '...hhssssssssssssshh....',
-  '...hhsggssssssggsshh....',
-  '...hhsgegssssgegsshh....',
-  '...hhsggssssssggsshh....',
-  '....hhsssssddssssssh....',
-  '....hhssssmmmmsssssh....',
+  '....hhsGGGssssGGGshh....',
+  '....hhsGiGssssGiGshh....',
+  '....hhsGeGssssGeGshh....',
+  '....hhssssddddsssssh....',
+  '....hhsssssmmsssssh.....',
   '....hhsssssssssssssh....',
   '.....hhsssssssssshh.....',
   '......wwwwwwwwwwww......',
-  '.....wbbbbbbbbbbbbw.....',
-  '....bbbbbbbbbbbbbbbb....',
-  '....bbbkbbbbbbbbBbbb....',
-  '....sbbkbbbbbbbbBbbs....',
-  '....sbbbbbbbbbbbbbbs....',
+  '.....wBbbbbbbbbbBw......',
+  '....Bbbbbbbbbbbbbbk.....',
+  '....BbbkkbbbbbbBBbbk....',
+  '....sBbkkbbbbbbBBbbs....',
+  '....sBbbbbbbbbbbbbbs....',
   '.....bbbbbbbbbbbbbb.....',
-  '.....bbbkbbbbbbBbbb.....',
+  '.....bbkkbbbbbbBBbb.....',
   '......bbbbbbbbbbbb......',
 ];
 const READER2_UPPER_UP = [
@@ -860,7 +862,7 @@ const READER2_UPPER_UP = [
   '.....hhhhhhhhhhhhhh.....',
   '....hhhhhhhhhhhhhhhh....',
   '....hhhHHHHHHHHHHhhh....',
-  '....hhhhHHHHHHHHhhhh....',
+  '....hhhhhHHHHHHhhhhh....',
   '....hhhhhhhhhhhhhhhh....',
   '....hhhhhhhhhhhhhhhh....',
   '....hhhhhhhhhhhhhhhh....',
@@ -869,13 +871,13 @@ const READER2_UPPER_UP = [
   '......hhhhhhhhhhhh......',
   '.....hhsssssssssshh.....',
   '......wwwwwwwwwwww......',
-  '.....wbbbbbbbbbbbbw.....',
-  '....bbbbbbbbbbbbbbbb....',
-  '....bbbBbbbbbbbbkbbb....',
-  '....sbbBbbbbbbbbkbbs....',
-  '....sbbbbbbbbbbbbbbs....',
+  '.....wBbbbbbbbbbBw......',
+  '....Bbbbbbbbbbbbbbk.....',
+  '....BbbBBbbbbbbkkbbk....',
+  '....sBbBBbbbbbbkkbbs....',
+  '....sBbbbbbbbbbbbbbs....',
   '.....bbbbbbbbbbbbbb.....',
-  '.....bbbBbbbbbbkbbb.....',
+  '.....bbBBbbbbbbkkbb.....',
   '......bbbbbbbbbbbb......',
 ];
 const LEGS24_STAND = [
