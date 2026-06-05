@@ -1349,7 +1349,8 @@ function drawAgent(agent) {
 
   // Persistent "thinking" bubble above the head while actively doing something.
   const busy = agent.state === 'working' || agent.state === 'walking_to_desk' ||
-               agent.state === 'jamesmie_flow' || agent.state === 'writer_flow';
+               agent.state === 'jamesmie_flow' || agent.state === 'writer_flow' ||
+               agent.state === 'mgr_dispatch';
   if (busy) {
     const bob = Math.sin(_lastTs / 350 + agent.pos.x * 0.1) * 2;
     ctx.save();
@@ -1421,11 +1422,20 @@ function _checkChat() {
 // JAMESMIE TRIGGER FLOW
 // ============================================================
 let _lastJamesmieTs = 0;
+// Where Jamesmie stands to brief the Manager (just left of the manager desk).
+const MGR_MEET = { x: 235, y: 255 };
+// Manager's pending assignments (filled from the tool-call log via _activateAgent).
+let _mgrQueue = [];
+function _mgrEnqueue(key, label) {
+  if (!agents.manager || key === 'manager' || key === 'jamesmie') return;
+  _mgrQueue.push({ key, label });
+  if (_mgrQueue.length > 3) _mgrQueue.shift();   // don't let the Manager fall too far behind
+}
 
 function triggerJamesmie(text, ts) {
   if (!ts || ts <= _lastJamesmieTs) return;
   const jam = agents.jamesmie;
-  if (jam.state === 'working' || jam.state === 'walking_to_desk') return;
+  if (jam.state === 'jamesmie_flow') return;   // already relaying
   _lastJamesmieTs = ts;
   leaveAllQueues('jamesmie');
   jam._coffeeArrived = false;
@@ -1434,9 +1444,10 @@ function triggerJamesmie(text, ts) {
   const truncated = text.length > 40 ? text.slice(0, 39) + '…' : text;
   jam.state = 'jamesmie_flow';
   jam._jMsg = truncated;
-  jam._jPhase = 'walking_desk';
+  jam._jPhase = 'to_mgr';            // walk to the Manager and relay
   jam._jTimer = 0;
-  jam.targetPos = { ...SIT_POS.jamesmie };
+  jam.targetPos = { ...MGR_MEET };
+  jam._waypoint = getWaypoint(jam.pos, jam.targetPos);
   jam.speechText = '';
   jam.taskLabel = '';
   jam._idleInit = false;
@@ -1472,6 +1483,7 @@ function _activateAgent(agentKey, label, ts) {
   leaveAllQueues(agentKey);          // free any queue slot before working
   ag._coffeeArrived = false;
   ag._sofaArrived = false;
+  _mgrEnqueue(agentKey, label);      // Manager will walk over and "assign" this
   ag.lastEventTs = ts;
   ag.taskLabel = label;
   ag.speechText = '';
@@ -1776,50 +1788,73 @@ function update(dt) {
       }
     }
   }
-  // ---- JAMESMIE DELEGATION FLOW ----
+  // ---- JAMESMIE RELAY FLOW (walks to Manager, relays your message) ----
   const jam = agents.jamesmie;
   if (jam.state === 'jamesmie_flow') {
     jam._jTimer += dt;
 
-    if (jam._jPhase === 'walking_desk') {
-      const arrived = moveToward(jam, SIT_POS.jamesmie, dt);
+    if (jam._jPhase === 'to_mgr') {
+      const arrived = moveToward(jam, MGR_MEET, dt);
       if (arrived) {
         jam._jPhase = 'speaking';
         jam._jTimer = 0;
-        jam._lastDY = 1;               // face down (seated)
-        jam.speechText = jam._jMsg;    // your voice
-        jam.speechTimer = 3000;
+        jam.facingLeft = false;        // face toward the manager desk (to the right)
+        jam.speechText = jam._jMsg;    // relay your words
+        jam.speechTimer = 3200;
+        const m = agents.manager;      // manager "receives" → thinks
+        if (m) { m._briefTimer = 2600; }
       }
     }
     else if (jam._jPhase === 'speaking') {
-      if (jam._jTimer > 3000) {
-        jam._jPhase = 'thinking';
-        jam._jTimer = 0;
-        jam._thinkDots = 0;
-        jam.speechText = '💭';
-      }
-    }
-    else if (jam._jPhase === 'thinking') {
-      // animate dots: . .. ...
-      jam._thinkDots = (jam._thinkDots || 0) + dt;
-      const n = 1 + (Math.floor(jam._thinkDots / 400) % 3);
-      jam.speechText = '💭' + '.'.repeat(n);
-      jam.speechTimer = 500;
-      if (jam._jTimer > 2000) {
-        jam._jPhase = 'dispatch';
-        jam._jTimer = 0;
-        jam.taskLabel = '📋 สั่งงาน!';
-        // face toward the team (dev room is to the right)
-        jam.facingLeft = false;
-      }
-    }
-    else if (jam._jPhase === 'dispatch') {
-      if (jam._jTimer > 1500) {
+      if (jam._jTimer > 3200) {
         jam._jPhase = null;
-        jam.taskLabel = '';
         jam.speechText = '';
-        jam.state = 'working';   // settle into seated working pose
-        jam._workTimer = 4000;
+        jam.targetPos = null;
+        jam.state = 'idle_wander';     // back to wandering the boss room
+        jam._idleInit = false;
+        jam.idleTimer = 0;
+      }
+    }
+  }
+
+  // ---- MANAGER DISPATCH FLOW (walks to each worker and assigns from the log) ----
+  const mgr = agents.manager;
+  if (mgr) {
+    if (mgr._briefTimer > 0) {         // just briefed by Jamesmie → thinking
+      mgr._briefTimer -= dt;
+      mgr.speechText = '💭';
+      mgr.speechTimer = 200;
+    }
+    if (mgr.state === 'mgr_dispatch') {
+      mgr._mTimer += dt;
+      if (mgr._mPhase === 'going') {
+        const arr = moveToward(mgr, mgr._mTarget, dt);
+        if (arr) { mgr._mPhase = 'assigning'; mgr._mTimer = 0; mgr.taskLabel = mgr._mMsg; }
+      } else if (mgr._mPhase === 'assigning') {
+        if (mgr._mTimer > 1700) {
+          mgr._mPhase = null;
+          mgr.taskLabel = '';
+          mgr.targetPos = null;
+          mgr.state = 'idle_wander';   // home-confined wander walks the Manager back to the boss room
+          mgr._idleInit = false;
+          mgr.idleTimer = 0;
+        }
+      }
+    } else if (mgr.state.startsWith('idle') && _mgrQueue.length) {
+      const job = _mgrQueue.shift();
+      const target = agents[job.key];
+      const sp = SIT_POS[job.key];
+      if (target && sp) {
+        leaveAllQueues('manager');
+        mgr._coffeeArrived = mgr._sofaArrived = false;
+        mgr._idleInit = false;
+        mgr.speechText = '';
+        mgr.state = 'mgr_dispatch';
+        mgr._mPhase = 'going';
+        mgr._mTimer = 0;
+        mgr._mTarget = { x: sp.x, y: sp.y + 34 };   // stand in front of the worker's desk
+        mgr._waypoint = getWaypoint(mgr.pos, mgr._mTarget);
+        mgr._mMsg = '→ ' + target.name + ': ' + job.label;
       }
     }
   }
