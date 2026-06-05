@@ -86,6 +86,7 @@ const C = {
   coderGreen:   '#22c55e',
   searchOrange: '#f97316',
   writerTeal:   '#14b8a6',
+  managerIndigo:'#6366f1',
 };
 
 // ============================================================
@@ -112,6 +113,7 @@ const WORK_POS = {
 };
 // "In-chair" point behind each desk: agent walks here to sit and work.
 const SIT_POS = {
+  manager:  { x: 315, y: 268 },  // manager desk (boss room) 250..380 x, 225..275 y
   jamesmie: { x: 100, y: 150 },  // boss desk 25..175 x, 100..155 y
   reader:   { x: 527, y: 148 },  // dev desk 480..575 x, 100..150 y
   coder:    { x: 697, y: 148 },  // dev desk 650..745 x, 100..150 y
@@ -121,6 +123,7 @@ const SIT_POS = {
 
 // Lower band of each desk, redrawn over a sitting agent to occlude the legs.
 const DESK_FRONTS = {
+  manager:  { x: 250, y: 256, w: 130, h: 22, color: C.deskWalnut },
   jamesmie: { x: 25,  y: 138, w: 150, h: 22, color: C.deskWalnut },
   reader:   { x: 480, y: 132, w: 95,  h: 22, color: C.deskGaming },
   coder:    { x: 650, y: 132, w: 95,  h: 22, color: C.deskGaming },
@@ -130,6 +133,7 @@ const DESK_FRONTS = {
 // Re-draw the actual desk (full detail) clipped to the band, so the occluder
 // blends seamlessly instead of looking like a flat panel/door over the desk.
 const DESKS = {
+  manager:  () => drawDeskTopDown(250, 225, 130, 50, C.deskWalnut),
   jamesmie: () => drawDeskTopDown(25, 100, 150, 55, C.deskWalnut),
   reader:   () => drawGamingDeskTopDown(480, 100, 95, 50),
   coder:    () => drawGamingDeskTopDown(650, 100, 95, 50),
@@ -197,6 +201,7 @@ const NAV_OBSTACLES = [
   // boss extras
   { x: 30,  y: 235, w: 90,  h: 30 },   // boss guest sofa
   { x: 195, y: 135, w: 30,  h: 60 },   // boss cabinet
+  { x: 250, y: 225, w: 130, h: 50 },   // manager desk
   // dev extras
   { x: 858, y: 300, w: 26,  h: 30 },   // dev fridge
   { x: 480, y: 300, w: 52,  h: 24 },   // dev crates
@@ -525,6 +530,11 @@ function drawAllFurniture() {
   drawSofaTopDown(br.x + 30, br.y + 195, 90, 30);
   drawCoffeeTableTopDown(br.x + 50, br.y + 232, 50, 18);
   drawCabinetTopDown(br.x + 195, br.y + 95, 30, 60);
+  // Manager workstation (boss room)
+  drawDeskTopDown(250, 225, 130, 50, C.deskWalnut);
+  rect(295, 232, 40, 26, '#1a2a3a');
+  rect(297, 234, 36, 22, '#0f2035');
+  drawChairTopDown(304, 240, '#4a3a2a');   // under SIT_POS.manager (x315)
 
   // ── DEV ROOM ──
   const dr = ROOMS.dev;
@@ -609,6 +619,9 @@ function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = nul
   const cols = grid[0].length;
   const rows = grid.length;
   const sprW = cols * scale;
+  // Round each cell to the integer grid so fractional scales (e.g. 1.5) tile
+  // seamlessly with no gaps/overlaps.
+  const px = i => Math.round(i * scale);
 
   ctx.save();
   if (facingLeft) {
@@ -619,7 +632,7 @@ function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = nul
         const ch = grid[r][c];
         if (ch === '.') continue;
         ctx.fillStyle = colorMap[ch] || '#ff00ff';
-        ctx.fillRect(c * scale, r * scale, scale, scale);
+        ctx.fillRect(px(c), px(r), px(c + 1) - px(c), px(r + 1) - px(r));
       }
     }
   } else {
@@ -628,7 +641,7 @@ function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = nul
         const ch = grid[r][c];
         if (ch === '.') continue;
         ctx.fillStyle = colorMap[ch] || '#ff00ff';
-        ctx.fillRect(cx + c * scale, cy + r * scale, scale, scale);
+        ctx.fillRect(cx + px(c), cy + px(r), px(c + 1) - px(c), px(r + 1) - px(r));
       }
     }
   }
@@ -662,256 +675,396 @@ const LEGS_TD_WALK2 = [
 ];
 
 // ============================================================
-// CHIBI SPRITES (18-wide, drawn at spriteScale 2) — small & cute.
-// Big head + big eyes. Keys: i eye-white, e pupil, G glasses,
-//   H hair-shadow, k body-shadow, c crown, m mouth.
+// CHIBI HI-RES SPRITES (24-wide, drawn at spriteScale 1.5) — cute + detailed.
+// Keys: i eye-white, w eye-shine, e pupil, G glasses, H hair-shadow,
+//   k body-shadow, B body-highlight, c crown, g dark, m mouth, d cheek.
 // ============================================================
-const LEGS_C_STAND = [
-  '......ll..ll......',
-  '......ll..ll......',
-  '......zz..zz......',
-  '.....zzz.zzz......',
+const LEGS_H_STAND = [
+  '........lll..lll........',
+  '........lll..lll........',
+  '........zzz..zzz........',
+  '.......zzzz.zzzz........',
 ];
-const LEGS_C_WALK1 = [
-  '......lll.l.......',
-  '......lll.l.......',
-  '......zzz.z.......',
-  '......zzz.z.......',
+const LEGS_H_WALK1 = [
+  '........llll..ll........',
+  '........llll..ll........',
+  '........zzzz..zz........',
+  '........zzzz.zz.........',
 ];
-const LEGS_C_WALK2 = [
-  '.......l.lll......',
-  '.......l.lll......',
-  '.......z.zzz......',
-  '.......z.zzz......',
+const LEGS_H_WALK2 = [
+  '........ll..llll........',
+  '........ll..llll........',
+  '........zz..zzzz........',
+  '........zz.zzzz.........',
 ];
-const JAMESMIE_C_DOWN = [
-  '.....c.c.c.c......',
-  '.....ccccccc......',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhsssssssssshh..',
-  '.hsssssssssssssh..',
-  '..hssiiissiiissh..',
-  '..hssieissieissh..',
-  '..hssiiissiiissh..',
-  '.hsssssssssssssh..',
-  '..hsssssmmssssh...',
-  '..hsssssssssssh...',
-  '...hhsssssssshh...',
-  '......wwwwww......',
-  '.....bbwwwwbb.....',
-  '.....sbwggwbs.....',
-  '.....bbwwwwbb.....',
-  '.....bbbbbbbb.....',
+const MANAGER_HD = [
+  '.......hhhhhhhhhh.......',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhssssssssssssHhh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '....hhsGGGGsssGGGGsh....',
+  '....hhsGiiGsssGiiGsh....',
+  '....hhsGeiGsssGieGsh....',
+  '....hhsGiiGsssGiiGsh....',
+  '...hhsssssssssssssssh...',
+  '...hhsssssddddssssssh...',
+  '...hhssssssmmsssssssh...',
+  '...hhssssssssssssshh....',
+  '........wwwwwwww........',
+  '........wwggggww........',
+  '.......bwwggwwbbb.......',
+  '......sbwwggwwbbBs......',
+  '......sbbwggwbbbbs......',
+  '......bbbwwbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const JAMESMIE_C_UP = [
-  '.....c.c.c.c......',
-  '.....ccccccc......',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '...hhhhhhhhhhhh...',
-  '...hhhhhhhhhhhh...',
-  '....hhhhhhhhhh....',
-  '....hhhhhhhhhh....',
-  '...hhssssssshh....',
-  '....hhsssssshh....',
-  '......wwwwww......',
-  '.....bbbbbbbb.....',
-  '....sbbbbbbbbs....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const MANAGER_HU = [
+  '.......hhhhhhhhhh.......',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '.....hhhhhhhhhhhhhh.....',
+  '......hhhhhhhhhhhh......',
+  '......hhhhhhhhhhhh......',
+  '.......hhhhhhhhhh.......',
+  '.......hhhhhhhhhh.......',
+  '.....hhsssssssssshh.....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbBbbbbbkbbs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const READER_C_DOWN = [
-  '.....hhhhhhhh.....',
-  '....hhhhhhhhhh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhsssssssssshh..',
-  '.hsssssssssssssh..',
-  '..hsGGGGssGGGGsh..',
-  '..hsGiiGssGiiGsh..',
-  '..hsGieGssGeiGsh..',
-  '..hsGiiGssGiiGsh..',
-  '..hsssssmmssssh...',
-  '..hsssssssssssh...',
-  '...hhsssssssshh...',
-  '......wwwwww......',
-  '.....bbbbbbbb.....',
-  '....sbbbbbbbbs....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const JAMESMIE_HD = [
+  '.......c.c.c.c.c........',
+  '.......ccccccccc........',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhssssssssssssHhh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '....hhsiiiisssiiiish....',
+  '....hhsiwiisssiiwish....',
+  '....hhsieiisssiieish....',
+  '....hhsiiiisssiiiish....',
+  '...hhsssssssssssssssh...',
+  '...hhsssssddddssssssh...',
+  '...hhssssssmmsssssssh...',
+  '...hhssssssssssssshh....',
+  '........wwwwwwww........',
+  '.......bbwwwwwwbb.......',
+  '......bbwwggwwbbbb......',
+  '.....sbbwggwwbbBbs......',
+  '.....sbbwwwwwbbbbs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const READER_C_UP = [
-  '.....hhhhhhhh.....',
-  '....hhhhhhhhhh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '...hhhhhhhhhhhh...',
-  '...hhhhhhhhhhhh...',
-  '....hhhhhhhhhh....',
-  '....hhhhhhhhhh....',
-  '...hhssssssshh....',
-  '....hhsssssshh....',
-  '......wwwwww......',
-  '.....bbbbbbbb.....',
-  '....sbbbbbbbbs....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const JAMESMIE_HU = [
+  '.......c.c.c.c.c........',
+  '.......ccccccccc........',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '.....hhhhhhhhhhhhhh.....',
+  '......hhhhhhhhhhhh......',
+  '......hhhhhhhhhhhh......',
+  '.......hhhhhhhhhh.......',
+  '.......hhhhhhhhhh.......',
+  '.....hhsssssssssshh.....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbBbbbbbkbbs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const CODER_C_DOWN = [
-  '....h.h.hh.h.h....',
-  '....hh.hhhh.hh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhsssssssssshh..',
-  '.hsssssssssssssh..',
-  '..hssiiissiiissh..',
-  '..hssieissieissh..',
-  '..hssiiissiiissh..',
-  '.hsssssssssssssh..',
-  '..hsssssmmssssh...',
-  '..hsssssssssssh...',
-  '...hhsssssssshh...',
-  '......wwwwww......',
-  '.....kbwbbwbk.....',
-  '.....sbwbbwbs.....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const READER_HD = [
+  '.......hhhhhhhhhh.......',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhssssssssssssHhh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '....hhsGGGGsssGGGGsh....',
+  '....hhsGiiGsssGiiGsh....',
+  '....hhsGeiGsssGieGsh....',
+  '....hhsGiiGsssGiiGsh....',
+  '...hhsssssssssssssssh...',
+  '...hhsssssddddssssssh...',
+  '...hhssssssmmsssssssh...',
+  '...hhssssssssssssshh....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbkbbbbbbBbbs.....',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const CODER_C_UP = [
-  '....h.h.hh.h.h....',
-  '....hh.hhhh.hh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '...hhhhhhhhhhhh...',
-  '...hhhhhhhhhhhh...',
-  '....hhhhhhhhhh....',
-  '....hhhhhhhhhh....',
-  '...hhssssssshh....',
-  '....hhsssssshh....',
-  '......wwwwww......',
-  '.....bbbbbbbb.....',
-  '....sbbbbbbbbs....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const READER_HU = [
+  '.......hhhhhhhhhh.......',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '.....hhhhhhhhhhhhhh.....',
+  '......hhhhhhhhhhhh......',
+  '......hhhhhhhhhhhh......',
+  '.......hhhhhhhhhh.......',
+  '.......hhhhhhhhhh.......',
+  '.....hhsssssssssshh.....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbBbbbbbkbbs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const SEARCHER_C_DOWN = [
-  '....hhhhhhh.hh....',
-  '...hhhhhhhhhhh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhsssssssssshh..',
-  '.hsssssssssssssh..',
-  '..hssiiissiiissh..',
-  '..hssieissieissh..',
-  '..hssiiissiiissh..',
-  '.hsssssssssssssh..',
-  '..hsssssmmssssh...',
-  '..hsssssssssssh...',
-  '...hhsssssssshh...',
-  '......wwwwww......',
-  '......wbbbbw......',
-  '.....swbbbws......',
-  '.....bbbbbbbb.....',
-  '.....bbbbbbbb.....',
+const CODER_HD = [
+  '....h.hh.hh.hh.hh.h.....',
+  '....hh.hhhh.hhhh.hh.....',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhssssssssssssHhh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '....hhsiiiisssiiiish....',
+  '....hhsiwiisssiiwish....',
+  '....hhsieiisssiieish....',
+  '....hhsiiiisssiiiish....',
+  '...hhsssssssssssssssh...',
+  '...hhsssssddddssssssh...',
+  '...hhssssssmmsssssssh...',
+  '...hhssssssssssssshh....',
+  '........wwwwwwww........',
+  '.......kkkkkkkkkk.......',
+  '.......kbbwwwwbbk.......',
+  '......skbwbbbbwbks......',
+  '......sbbwbbbbwbBs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const SEARCHER_C_UP = [
-  '....hhhhhhh.hh....',
-  '...hhhhhhhhhhh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '...hhhhhhhhhhhh...',
-  '...hhhhhhhhhhhh...',
-  '....hhhhhhhhhh....',
-  '....hhhhhhhhhh....',
-  '...hhssssssshh....',
-  '....hhsssssshh....',
-  '......wwwwww......',
-  '.....bbbbbbbb.....',
-  '....sbbbbbbbbs....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const CODER_HU = [
+  '....h.hh.hh.hh.hh.h.....',
+  '....hh.hhhh.hhhh.hh.....',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '.....hhhhhhhhhhhhhh.....',
+  '......hhhhhhhhhhhh......',
+  '......hhhhhhhhhhhh......',
+  '.......hhhhhhhhhh.......',
+  '.......hhhhhhhhhh.......',
+  '.....hhsssssssssshh.....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbBbbbbbkbbs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const WRITER_C_DOWN = [
-  '.....hhhhhhhh.....',
-  '....hhhhhhhhhh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhsssssssssshh..',
-  '.hsssssssssssssh..',
-  '..hsGGGGssGGGGsh..',
-  '..hsGiiGssGiiGsh..',
-  '..hsGieGssGeiGsh..',
-  '..hsGiiGssGiiGsh..',
-  '..hsssssmmssssh...',
-  '..hsssssssssssh...',
-  '...hhsssssssshh...',
-  '......wwwwww......',
-  '.....bbbbbbbb.....',
-  '....sbbbbbbbbs....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const SEARCHER_HD = [
+  '.....hhhhhhhhhh.hh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhssssssssssssHhh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '....hhsiiiisssiiiish....',
+  '....hhsiwiisssiiwish....',
+  '....hhsieiisssiieish....',
+  '....hhsiiiisssiiiish....',
+  '...hhsssssssssssssssh...',
+  '...hhsssssddddssssssh...',
+  '...hhssssssmmsssssssh...',
+  '...hhssssssssssssshh....',
+  '........wwwwwwww........',
+  '.......wbbbbbbbbw.......',
+  '.......wwbbbbbbww.......',
+  '......swwbbbbwwbbs......',
+  '......sbwwbbwwbbBs......',
+  '......bbbwwwwbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
-const WRITER_C_UP = [
-  '.....hhhhhhhh.....',
-  '....hhhhhhhhhh....',
-  '...hhhhhhhhhhhh...',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhHHHHHHHHhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '..hhhhhhhhhhhhhh..',
-  '...hhhhhhhhhhhh...',
-  '...hhhhhhhhhhhh...',
-  '....hhhhhhhhhh....',
-  '....hhhhhhhhhh....',
-  '...hhssssssshh....',
-  '....hhsssssshh....',
-  '......wwwwww......',
-  '.....bbbbbbbb.....',
-  '....sbbbbbbbbs....',
-  '....bbbbbbbbbb....',
-  '.....bbbbbbbb.....',
+const SEARCHER_HU = [
+  '.....hhhhhhhhhh.hh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '.....hhhhhhhhhhhhhh.....',
+  '......hhhhhhhhhhhh......',
+  '......hhhhhhhhhhhh......',
+  '.......hhhhhhhhhh.......',
+  '.......hhhhhhhhhh.......',
+  '.....hhsssssssssshh.....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbBbbbbbkbbs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
 ];
+const WRITER_HD = [
+  '.......hhhhhhhhhh.......',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhssssssssssssHhh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '...hhsssssssssssssssh...',
+  '....hhsGGGGsssGGGGsh....',
+  '....hhsGiiGsssGiiGsh....',
+  '....hhsGeiGsssGieGsh....',
+  '....hhsGiiGsssGiiGsh....',
+  '...hhsssssssssssssssh...',
+  '...hhsssssddddssssssh...',
+  '...hhssssssmmsssssssh...',
+  '...hhssssssssssssshh....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbkbbbbbbBbbs.....',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
+];
+const WRITER_HU = [
+  '.......hhhhhhhhhh.......',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhHHHHHHHHHHHHhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '...hhhhhhhhhhhhhhhhhh...',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '.....hhhhhhhhhhhhhh.....',
+  '......hhhhhhhhhhhh......',
+  '......hhhhhhhhhhhh......',
+  '.......hhhhhhhhhh.......',
+  '.......hhhhhhhhhh.......',
+  '.....hhsssssssssshh.....',
+  '........wwwwwwww........',
+  '.......bbbbbbbbbb.......',
+  '......bbbbbbbbbbbb......',
+  '.....sbbbbbbbbbbbbs.....',
+  '.....sbbBbbbbbkbbs......',
+  '......bbbbbbbbbbbb......',
+  '.......bbbbbbbbbb.......',
+  '........bbbbbbbb........',
+];
+const SPRITES_MANAGER2 = {
+  down: { stand: [...MANAGER_HD, ...LEGS_H_STAND], walk1: [...MANAGER_HD, ...LEGS_H_WALK1], walk2: [...MANAGER_HD, ...LEGS_H_WALK2] },
+  up:   { stand: [...MANAGER_HU, ...LEGS_H_STAND], walk1: [...MANAGER_HU, ...LEGS_H_WALK1], walk2: [...MANAGER_HU, ...LEGS_H_WALK2] },
+};
 const SPRITES_JAMESMIE2 = {
-  down: { stand: [...JAMESMIE_C_DOWN, ...LEGS_C_STAND], walk1: [...JAMESMIE_C_DOWN, ...LEGS_C_WALK1], walk2: [...JAMESMIE_C_DOWN, ...LEGS_C_WALK2] },
-  up:   { stand: [...JAMESMIE_C_UP, ...LEGS_C_STAND], walk1: [...JAMESMIE_C_UP, ...LEGS_C_WALK1], walk2: [...JAMESMIE_C_UP, ...LEGS_C_WALK2] },
+  down: { stand: [...JAMESMIE_HD, ...LEGS_H_STAND], walk1: [...JAMESMIE_HD, ...LEGS_H_WALK1], walk2: [...JAMESMIE_HD, ...LEGS_H_WALK2] },
+  up:   { stand: [...JAMESMIE_HU, ...LEGS_H_STAND], walk1: [...JAMESMIE_HU, ...LEGS_H_WALK1], walk2: [...JAMESMIE_HU, ...LEGS_H_WALK2] },
 };
 const SPRITES_READER2 = {
-  down: { stand: [...READER_C_DOWN, ...LEGS_C_STAND], walk1: [...READER_C_DOWN, ...LEGS_C_WALK1], walk2: [...READER_C_DOWN, ...LEGS_C_WALK2] },
-  up:   { stand: [...READER_C_UP, ...LEGS_C_STAND], walk1: [...READER_C_UP, ...LEGS_C_WALK1], walk2: [...READER_C_UP, ...LEGS_C_WALK2] },
+  down: { stand: [...READER_HD, ...LEGS_H_STAND], walk1: [...READER_HD, ...LEGS_H_WALK1], walk2: [...READER_HD, ...LEGS_H_WALK2] },
+  up:   { stand: [...READER_HU, ...LEGS_H_STAND], walk1: [...READER_HU, ...LEGS_H_WALK1], walk2: [...READER_HU, ...LEGS_H_WALK2] },
 };
 const SPRITES_CODER2 = {
-  down: { stand: [...CODER_C_DOWN, ...LEGS_C_STAND], walk1: [...CODER_C_DOWN, ...LEGS_C_WALK1], walk2: [...CODER_C_DOWN, ...LEGS_C_WALK2] },
-  up:   { stand: [...CODER_C_UP, ...LEGS_C_STAND], walk1: [...CODER_C_UP, ...LEGS_C_WALK1], walk2: [...CODER_C_UP, ...LEGS_C_WALK2] },
+  down: { stand: [...CODER_HD, ...LEGS_H_STAND], walk1: [...CODER_HD, ...LEGS_H_WALK1], walk2: [...CODER_HD, ...LEGS_H_WALK2] },
+  up:   { stand: [...CODER_HU, ...LEGS_H_STAND], walk1: [...CODER_HU, ...LEGS_H_WALK1], walk2: [...CODER_HU, ...LEGS_H_WALK2] },
 };
 const SPRITES_SEARCHER2 = {
-  down: { stand: [...SEARCHER_C_DOWN, ...LEGS_C_STAND], walk1: [...SEARCHER_C_DOWN, ...LEGS_C_WALK1], walk2: [...SEARCHER_C_DOWN, ...LEGS_C_WALK2] },
-  up:   { stand: [...SEARCHER_C_UP, ...LEGS_C_STAND], walk1: [...SEARCHER_C_UP, ...LEGS_C_WALK1], walk2: [...SEARCHER_C_UP, ...LEGS_C_WALK2] },
+  down: { stand: [...SEARCHER_HD, ...LEGS_H_STAND], walk1: [...SEARCHER_HD, ...LEGS_H_WALK1], walk2: [...SEARCHER_HD, ...LEGS_H_WALK2] },
+  up:   { stand: [...SEARCHER_HU, ...LEGS_H_STAND], walk1: [...SEARCHER_HU, ...LEGS_H_WALK1], walk2: [...SEARCHER_HU, ...LEGS_H_WALK2] },
 };
 const SPRITES_WRITER2 = {
-  down: { stand: [...WRITER_C_DOWN, ...LEGS_C_STAND], walk1: [...WRITER_C_DOWN, ...LEGS_C_WALK1], walk2: [...WRITER_C_DOWN, ...LEGS_C_WALK2] },
-  up:   { stand: [...WRITER_C_UP, ...LEGS_C_STAND], walk1: [...WRITER_C_UP, ...LEGS_C_WALK1], walk2: [...WRITER_C_UP, ...LEGS_C_WALK2] },
+  down: { stand: [...WRITER_HD, ...LEGS_H_STAND], walk1: [...WRITER_HD, ...LEGS_H_WALK1], walk2: [...WRITER_HD, ...LEGS_H_WALK2] },
+  up:   { stand: [...WRITER_HU, ...LEGS_H_STAND], walk1: [...WRITER_HU, ...LEGS_H_WALK1], walk2: [...WRITER_HU, ...LEGS_H_WALK2] },
 };
 
 // ============================================================
 // AGENT OBJECTS
 // ============================================================
 const agents = {
+  manager: {
+    name: 'Manager', color: C.managerIndigo, home: 'boss',
+    hairColor: '#1a1a2e', sprites: SPRITES_MANAGER2, spriteScale: 1.5, _lastDY: 1,
+    _chatPhrase: '', _chatMidX: 0, _waypoint: null,
+    pos: { x: 315, y: 268 }, targetPos: null,
+    speed: 85, state: 'idle_wander',
+    frameIdx: 0, frameTimer: 0,
+    idleTimer: 0, idleDuration: 5000 + Math.random() * 10000,
+    facingLeft: false,
+    taskLabel: '', speechText: '', speechTimer: 0,
+    lastEventTs: 0, lastCompletedTs: 0,
+  },
   jamesmie: {
     name: 'Jamesmie', color: C.jamesGold, home: 'boss',
-    hairColor: '#1a0a00', sprites: SPRITES_JAMESMIE2, spriteScale: 2, _lastDY: 1,
+    hairColor: '#1a0a00', sprites: SPRITES_JAMESMIE2, spriteScale: 1.5, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 100, y: 320 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -923,7 +1076,7 @@ const agents = {
   },
   reader: {
     name: 'Reader', color: C.readerBlue, home: 'dev',
-    hairColor: '#8b4513', sprites: SPRITES_READER2, spriteScale: 2, _lastDY: 1,
+    hairColor: '#8b4513', sprites: SPRITES_READER2, spriteScale: 1.5, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 350, y: 300 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -935,7 +1088,7 @@ const agents = {
   },
   coder: {
     name: 'Coder', color: C.coderGreen, home: 'dev',
-    hairColor: '#1a237e', sprites: SPRITES_CODER2, spriteScale: 2, _lastDY: 1,
+    hairColor: '#1a237e', sprites: SPRITES_CODER2, spriteScale: 1.5, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 500, y: 340 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -947,7 +1100,7 @@ const agents = {
   },
   searcher: {
     name: 'Searcher', color: C.searchOrange, home: 'ops',
-    hairColor: '#6b0f1a', sprites: SPRITES_SEARCHER2, spriteScale: 2, _lastDY: 1,
+    hairColor: '#6b0f1a', sprites: SPRITES_SEARCHER2, spriteScale: 1.5, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 200, y: 380 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -959,7 +1112,7 @@ const agents = {
   },
   writer: {
     name: 'Writer', color: C.writerTeal, home: 'dev',
-    hairColor: '#0f3a35', sprites: SPRITES_WRITER2, spriteScale: 2, _lastDY: 1,
+    hairColor: '#0f3a35', sprites: SPRITES_WRITER2, spriteScale: 1.5, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 600, y: 250 }, targetPos: null,
     speed: 85, state: 'idle_wander',
