@@ -1,0 +1,17 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Runtime state — rewritten by log-event.py on every tool call (recreated on demand)
+agent-events.json
+agent-events.json.tmp
+
+# Temp pixel-art render files from the visual-dev workflow (see CLAUDE.md)
+__*.png
+__*_gen.txt
+
+# Local superpowers scratch state (brainstorm sessions, per-machine)
+.superpowers/
+
+# Personal Claude Code settings (keep shared .claude/settings.json tracked)
+.claude/settings.local.json
