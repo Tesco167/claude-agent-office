@@ -128,7 +128,9 @@ def atomic_write(path, data):
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else 'pre'
-    here = Path(__file__).parent
+    # Script lives in py/; agent-events.json stays at the project root where
+    # office.html fetches it (./agent-events.json), so target the parent dir.
+    here = Path(__file__).parent.parent
     events_path = here / 'agent-events.json'
 
     try:

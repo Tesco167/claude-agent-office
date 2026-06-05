@@ -29,7 +29,7 @@ try {
         Start-Process $url
     }
 } catch {
-    Write-Host "Server started (could not verify — open $url manually)" -ForegroundColor Yellow
+    Write-Host "Server started (could not verify - open $url manually)" -ForegroundColor Yellow
     Start-Process $url
 }
 
