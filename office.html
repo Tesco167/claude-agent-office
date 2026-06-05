@@ -85,6 +85,7 @@ const C = {
   readerBlue:   '#3b82f6',
   coderGreen:   '#22c55e',
   searchOrange: '#f97316',
+  writerTeal:   '#14b8a6',
 };
 
 // ============================================================
@@ -115,6 +116,7 @@ const SIT_POS = {
   reader:   { x: 527, y: 148 },  // dev desk 480..575 x, 100..150 y
   coder:    { x: 697, y: 148 },  // dev desk 650..745 x, 100..150 y
   searcher: { x: 72,  y: 400 },  // ops desk 25..120 x, 355..405 y
+  writer:   { x: 820, y: 148 },  // dev third desk 773..868 x, 100..150 y
 };
 
 // Lower band of each desk, redrawn over a sitting agent to occlude the legs.
@@ -123,6 +125,7 @@ const DESK_FRONTS = {
   reader:   { x: 480, y: 132, w: 95,  h: 22, color: C.deskGaming },
   coder:    { x: 650, y: 132, w: 95,  h: 22, color: C.deskGaming },
   searcher: { x: 25,  y: 387, w: 95,  h: 22, color: C.deskGaming },
+  writer:   { x: 773, y: 132, w: 95,  h: 22, color: C.deskGaming },
 };
 const IDLE_POS = {
   coffee: { x: 855, y: 355 },    // just below coffee machine
@@ -191,6 +194,7 @@ const NAV_OBSTACLES = [
   { x: 405, y: 425, w: 28,  h: 55 },   // ops extra rack
   // lounge extras
   { x: 464, y: 360, w: 24,  h: 110 },  // lounge bookshelf
+  { x: 773, y: 100, w: 95,  h: 50 },   // writer desk (dev third)
 ];
 
 function isInsideObstacle(x, y, pad = 10) {
@@ -485,6 +489,10 @@ function drawAllFurniture() {
   rect(dr.x + 210, dr.y + 67, 40, 28, '#1a2a3a');
   rect(dr.x + 212, dr.y + 69, 36, 24, '#0f2035');
   drawGamingChairTopDown(dr.x + 215, dr.y + 125);
+  drawGamingDeskTopDown(dr.x + 323, dr.y + 60, 95, 50);  // 450+323=773
+  rect(dr.x + 333, dr.y + 67, 40, 28, '#1a2a3a');
+  rect(dr.x + 335, dr.y + 69, 36, 24, '#0f2035');
+  drawGamingChairTopDown(dr.x + 338, dr.y + 125);
   drawServerRackTopDown(dr.x + ROOM_W - 45, dr.y + WALL + 10);
   // dev extras
   drawWhiteboardTopDown(dr.x + 110, dr.y + WALL + 4, 120);
@@ -757,6 +765,47 @@ const SPRITES_SEARCHER = {
   up:   { stand: [...SEARCHER_UPPER_UP,   ...LEGS_TD_STAND], walk1: [...SEARCHER_UPPER_UP,   ...LEGS_TD_WALK1], walk2: [...SEARCHER_UPPER_UP,   ...LEGS_TD_WALK2] },
 };
 
+const WRITER_UPPER_DOWN = [
+  '.....hhhhh......',  // 0 short neat hair
+  '....hssssshh....',  // 1
+  '....hse.esh.....',  // 2 eyes
+  '....hsssssh.....',  // 3
+  '.....sssss......',  // 4 neck
+  '....wbbbbbw.....',  // 5 collar
+  '...bbbbbbbbb....',  // 6 shoulders
+  '..sbbbbbbbbs....',  // 7 hands
+  '....bbbbbbb.....',  // 8
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const WRITER_UPPER_UP = [
+  '.....hhhhh......',  // 0
+  '....hhhhhhh.....',  // 1
+  '....hhhhhh......',  // 2 back of head
+  '....hhhhhh......',  // 3
+  '.....sssss......',  // 4 neck
+  '....bbbbbbb.....',  // 5
+  '...bbbbbbbbb....',  // 6
+  '..sbbbbbbbbs....',  // 7
+  '....bbbbbbb.....',  // 8
+  '....bbbbbbb.....',  // 9
+  '....bbbbbbb.....',  // 10
+  '....bbbbbbb.....',  // 11
+  '....bbbbbbb.....',  // 12
+  '....bbbbbbb.....',  // 13
+  '.....lllll......',  // 14
+];
+
+const SPRITES_WRITER = {
+  down: { stand: [...WRITER_UPPER_DOWN, ...LEGS_TD_STAND], walk1: [...WRITER_UPPER_DOWN, ...LEGS_TD_WALK1], walk2: [...WRITER_UPPER_DOWN, ...LEGS_TD_WALK2] },
+  up:   { stand: [...WRITER_UPPER_UP,   ...LEGS_TD_STAND], walk1: [...WRITER_UPPER_UP,   ...LEGS_TD_WALK1], walk2: [...WRITER_UPPER_UP,   ...LEGS_TD_WALK2] },
+};
+
 // ============================================================
 // AGENT OBJECTS
 // ============================================================
@@ -802,6 +851,18 @@ const agents = {
     hairColor: '#6b0f1a', sprites: SPRITES_SEARCHER, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 200, y: 380 }, targetPos: null,
+    speed: 85, state: 'idle_wander',
+    frameIdx: 0, frameTimer: 0,
+    idleTimer: 0, idleDuration: 5000 + Math.random() * 10000,
+    facingLeft: false,
+    taskLabel: '', speechText: '', speechTimer: 0,
+    lastEventTs: 0, lastCompletedTs: 0,
+  },
+  writer: {
+    name: 'Writer', color: C.writerTeal,
+    hairColor: '#0f3a35', sprites: SPRITES_WRITER, _lastDY: 1,
+    _chatPhrase: '', _chatMidX: 0, _waypoint: null,
+    pos: { x: 600, y: 250 }, targetPos: null,
     speed: 85, state: 'idle_wander',
     frameIdx: 0, frameTimer: 0,
     idleTimer: 0, idleDuration: 5000 + Math.random() * 10000,
