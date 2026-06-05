@@ -54,6 +54,22 @@ Claude Code hooks → log-event.py → agent-events.json ← office.html (polls 
 - `CENTER_POS` — where Jamesmie walks to announce user messages
 - `WALK_FRAMES` — 4-frame walk cycle: `[stand, walk1, stand, walk2]`
 
+## Visual development workflow (REQUIRED)
+
+**Before integrating any new visual object (sprite, character, furniture piece) into `office.html`, render a preview image first and look at it.** Do not commit blind — pixel-art mistakes (wrong proportions, merged colors, off-by-one grids, ugly shading) are invisible in code and only obvious in an image.
+
+Workflow:
+1. Build the object's grid/draw logic in a throwaway Python script.
+2. Render it to a PNG using the pure-stdlib encoder (`zlib` + `struct`, no PIL/Node needed) — replicate the same color map / `shadeHex` / scale the real code uses.
+3. Read the PNG to inspect it. Iterate on the art until it looks right.
+4. Only then port the validated grids into `office.html` (generate the JS to a temp file and splice it in to avoid transcription errors).
+5. Delete temp `__*.png` / `__*_gen.txt` files before committing.
+
+Notes:
+- `node` is **not installed**, so the browser canvas can't be inspected headlessly. The Python PNG render is how you (the agent) actually see sprites; the human verifies the live page in the browser.
+- Always validate every sprite grid row is the exact expected width before integrating.
+- Watch for `const` name collisions when adding sprite arrays — duplicate identifiers throw a `SyntaxError` that blanks the whole page.
+
 ## Hook configuration
 
 To wire `log-event.py` into Claude Code, add to `.claude/settings.json`:
