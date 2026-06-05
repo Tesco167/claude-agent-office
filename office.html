@@ -516,8 +516,8 @@ function drawAllFurniture() {
   rect(br.x + 55, br.y + 67, 38, 26, '#1a2a3a');
   rect(br.x + 57, br.y + 69, 34, 22, '#0f2035');
   rect(br.x + 72, br.y + 93, 8, 5, '#555');
-  drawChairTopDown(br.x + 55, br.y + 130, '#4a3a2a');
-  drawChairTopDown(br.x + 100, br.y + 130, '#4a3a2a');
+  drawChairTopDown(br.x + 89, br.y + 118, '#4a3a2a');   // work chair under SIT_POS.jamesmie
+  drawChairTopDown(br.x + 45, br.y + 132, '#5a4632');   // guest chair, aside
   drawPlantTopDown(br.x + ROOM_W - 40, br.y + WALL + 6);
   // boss extras
   drawRugTopDown(br.x + 20, br.y + 55, 165, 65);
@@ -531,15 +531,15 @@ function drawAllFurniture() {
   drawGamingDeskTopDown(dr.x + 30, dr.y + 60, 95, 50);
   rect(dr.x + 40, dr.y + 67, 40, 28, '#1a2a3a');
   rect(dr.x + 42, dr.y + 69, 36, 24, '#0f2035');
-  drawGamingChairTopDown(dr.x + 45, dr.y + 125);
+  drawGamingChairTopDown(dr.x + 64, dr.y + 110);   // reader chair under SIT_POS
   drawGamingDeskTopDown(dr.x + 200, dr.y + 60, 95, 50);
   rect(dr.x + 210, dr.y + 67, 40, 28, '#1a2a3a');
   rect(dr.x + 212, dr.y + 69, 36, 24, '#0f2035');
-  drawGamingChairTopDown(dr.x + 215, dr.y + 125);
+  drawGamingChairTopDown(dr.x + 234, dr.y + 110);  // coder chair under SIT_POS
   drawGamingDeskTopDown(dr.x + 323, dr.y + 60, 95, 50);  // 450+323=773
   rect(dr.x + 333, dr.y + 67, 40, 28, '#1a2a3a');
   rect(dr.x + 335, dr.y + 69, 36, 24, '#0f2035');
-  drawGamingChairTopDown(dr.x + 338, dr.y + 125);
+  drawGamingChairTopDown(dr.x + 357, dr.y + 110);  // writer chair under SIT_POS
   drawServerRackTopDown(dr.x + ROOM_W - 45, dr.y + WALL + 10);
   // dev extras
   drawWhiteboardTopDown(dr.x + 110, dr.y + WALL + 4, 120);
@@ -553,7 +553,7 @@ function drawAllFurniture() {
   drawGamingDeskTopDown(or.x + 25, or.y + 55, 95, 50);
   rect(or.x + 35, or.y + 62, 40, 28, '#1a2a3a');
   rect(or.x + 37, or.y + 64, 36, 24, '#001a00');
-  drawGamingChairTopDown(or.x + 40, or.y + 120);
+  drawGamingChairTopDown(or.x + 59, or.y + 105);   // searcher chair under SIT_POS
   rect(or.x + 170, or.y + WALL + 6, 60, 20, '#111');
   rect(or.x + 172, or.y + WALL + 8, 56, 16, '#001a00');
   rect(or.x + 260, or.y + WALL + 6, 60, 20, '#111');
