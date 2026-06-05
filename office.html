@@ -952,13 +952,19 @@ function drawAgent(agent) {
   const x = Math.round(agent.pos.x - sprW / 2);
   const y = Math.round(agent.pos.y - sprH);
 
+  // Seated = working, or in a flow phase past the walk to the desk.
+  // While walking_desk the agent should still face its travel direction and animate.
+  const seated =
+    agent.state === 'working' ||
+    (agent.state === 'writer_flow'   && agent._wPhase && agent._wPhase !== 'walking_desk') ||
+    (agent.state === 'jamesmie_flow' && agent._jPhase && agent._jPhase !== 'walking_desk');
+
   let facing = (agent._lastDY < 0) ? 'up' : 'down';
-  if (agent.state === 'working' || agent.state === 'writer_flow' || agent.state === 'jamesmie_flow') facing = 'down';
+  if (seated) facing = 'down';
   const spr = agent.sprites[facing];
 
   let grid;
-  if (agent.state === 'idle_chill' || agent.state === 'idle_phone' ||
-      agent.state === 'working' || agent.state === 'writer_flow' || agent.state === 'jamesmie_flow') {
+  if (agent.state === 'idle_chill' || agent.state === 'idle_phone' || seated) {
     grid = spr.stand;
   } else {
     const wf = [spr.stand, spr.walk1, spr.stand, spr.walk2];
@@ -1042,6 +1048,8 @@ function triggerJamesmie(text, ts) {
   if (jam.state === 'working' || jam.state === 'walking_to_desk') return;
   _lastJamesmieTs = ts;
   leaveAllQueues('jamesmie');
+  jam._coffeeArrived = false;
+  jam._sofaArrived = false;
 
   const truncated = text.length > 40 ? text.slice(0, 39) + '…' : text;
   jam.state = 'jamesmie_flow';
@@ -1062,6 +1070,8 @@ function triggerWriter(text, ts) {
   if (w.state === 'working' || w.state === 'walking_to_desk' || w.state === 'writer_flow') return;
   _lastWriterTs = ts;
   leaveAllQueues('writer');
+  w._coffeeArrived = false;
+  w._sofaArrived = false;
   const truncated = text.length > 40 ? text.slice(0, 39) + '…' : text;
   w.state = 'writer_flow';
   w._wMsg = truncated;
