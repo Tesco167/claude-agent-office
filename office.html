@@ -127,6 +127,15 @@ const DESK_FRONTS = {
   searcher: { x: 25,  y: 387, w: 95,  h: 22, color: C.deskGaming },
   writer:   { x: 773, y: 132, w: 95,  h: 22, color: C.deskGaming },
 };
+// Re-draw the actual desk (full detail) clipped to the band, so the occluder
+// blends seamlessly instead of looking like a flat panel/door over the desk.
+const DESKS = {
+  jamesmie: () => drawDeskTopDown(25, 100, 150, 55, C.deskWalnut),
+  reader:   () => drawGamingDeskTopDown(480, 100, 95, 50),
+  coder:    () => drawGamingDeskTopDown(650, 100, 95, 50),
+  searcher: () => drawGamingDeskTopDown(25, 355, 95, 50),
+  writer:   () => drawGamingDeskTopDown(773, 100, 95, 50),
+};
 // After finishing work, agents stay seated this long before wandering off —
 // prevents pacing back and forth when tool calls arrive in bursts.
 const DESK_LINGER_MS = 300000;  // 5 minutes
@@ -1607,9 +1616,16 @@ function drawDeskFronts() {
       (ag.state === 'jamesmie_flow' && ag._jPhase && ag._jPhase !== 'walking_desk');
     if (!seated) continue;
     const d = DESK_FRONTS[key];
-    if (!d) continue;
-    rect(d.x, d.y, d.w, d.h, d.color);
-    rect(d.x, d.y, d.w, 3, 'rgba(255,255,255,0.08)');
+    const deskFn = DESKS[key];
+    if (!d || !deskFn) continue;
+    // Clip to the lower band and redraw the real desk so it blends seamlessly
+    // (no flat panel that looks like a door opening/closing as agents sit/leave).
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(d.x - 6, d.y, d.w + 12, d.h + 10);
+    ctx.clip();
+    deskFn();
+    ctx.restore();
   }
 }
 
