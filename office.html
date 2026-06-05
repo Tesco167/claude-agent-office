@@ -979,6 +979,7 @@ function distTo(agent, target) {
 }
 
 function moveToward(agent, target, dt) {
+  if (!target) return false;   // nothing to move toward this frame
   agent._lastDY = target.y - agent.pos.y;
   const goal = agent._waypoint || target;
   const dx = goal.x - agent.pos.x;
@@ -1126,6 +1127,10 @@ function _checkChat() {
         const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
         const midX = (a.pos.x + b.pos.x) / 2;
         const midY = (a.pos.y + b.pos.y) / 2;
+        // release any queue slots so the coffee/sofa lines don't leak
+        leaveAllQueues(_agentKey(a)); leaveAllQueues(_agentKey(b));
+        a._coffeeArrived = a._sofaArrived = false;
+        b._coffeeArrived = b._sofaArrived = false;
         a.state = 'idle_chat_walk'; a.targetPos = { x: midX - 24, y: midY };
         a._chatPhrase = phrase; a._chatMidX = midX; a.speechText = '';
         b.state = 'idle_chat_walk'; b.targetPos = { x: midX + 24, y: midY };
@@ -1384,6 +1389,10 @@ function update(dt) {
       }
       const spot = queueSlotPos('coffee', _agentKey(ag));
       if (spot) ag.targetPos = { x: spot.x, y: spot.y };
+      if (!ag.targetPos) {            // dropped from queue → recover
+        ag._idleInit = false; ag._coffeeArrived = false;
+        ag.idleTimer = 0; ag.state = 'idle_wander'; continue;
+      }
       const atSpot = moveToward(ag, ag.targetPos, dt);
       const atFront = queues.coffee.indexOf(_agentKey(ag)) === 0;
       if (atSpot && atFront && !ag._coffeeArrived) {
@@ -1416,6 +1425,10 @@ function update(dt) {
       }
       const spot = queueSlotPos('sofa', _agentKey(ag));
       if (spot) ag.targetPos = { x: spot.x, y: spot.y };
+      if (!ag.targetPos) {            // dropped from queue → recover
+        ag._idleInit = false; ag._sofaArrived = false;
+        ag.idleTimer = 0; ag.state = 'idle_wander'; continue;
+      }
       const atSofa = moveToward(ag, ag.targetPos, dt);
       if (atSofa && !ag._sofaArrived) {
         ag._sofaArrived = true;
