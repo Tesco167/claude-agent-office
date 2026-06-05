@@ -112,13 +112,15 @@ const WORK_POS = {
   searcher: { x: 70,  y: 410 },  // in front of ops desk (desk front at y=405)
 };
 // "In-chair" point behind each desk: agent walks here to sit and work.
+// "In-chair" point — centered on each desk's MONITOR so agent, chair, and
+// screen line up. Agent faces up (back to viewer) here, overlapping the screen.
 const SIT_POS = {
-  manager:  { x: 315, y: 268 },  // manager desk (boss room) 250..380 x, 225..275 y
-  jamesmie: { x: 100, y: 150 },  // boss desk 25..175 x, 100..155 y
-  reader:   { x: 527, y: 148 },  // dev desk 480..575 x, 100..150 y
-  coder:    { x: 697, y: 148 },  // dev desk 650..745 x, 100..150 y
-  searcher: { x: 72,  y: 400 },  // ops desk 25..120 x, 355..405 y
-  writer:   { x: 820, y: 148 },  // dev third desk 773..868 x, 100..150 y
+  manager:  { x: 315, y: 268 },  // monitor 297..333
+  jamesmie: { x: 74,  y: 150 },  // monitor 57..91
+  reader:   { x: 510, y: 148 },  // monitor 492..528
+  coder:    { x: 680, y: 148 },  // monitor 662..698
+  searcher: { x: 55,  y: 400 },  // monitor 37..73
+  writer:   { x: 803, y: 148 },  // monitor 785..821
 };
 
 // Lower band of each desk, redrawn over a sitting agent to occlude the legs.
@@ -521,8 +523,8 @@ function drawAllFurniture() {
   rect(br.x + 55, br.y + 67, 38, 26, '#1a2a3a');
   rect(br.x + 57, br.y + 69, 34, 22, '#0f2035');
   rect(br.x + 72, br.y + 93, 8, 5, '#555');
-  drawChairTopDown(br.x + 89, br.y + 118, '#4a3a2a');   // work chair under SIT_POS.jamesmie
-  drawChairTopDown(br.x + 45, br.y + 132, '#5a4632');   // guest chair, aside
+  drawChairTopDown(br.x + 63, br.y + 118, '#4a3a2a');   // work chair under SIT_POS.jamesmie (x74)
+  drawChairTopDown(br.x + 120, br.y + 132, '#5a4632');  // guest chair, aside
   drawPlantTopDown(br.x + ROOM_W - 40, br.y + WALL + 6);
   // boss extras
   drawRugTopDown(br.x + 20, br.y + 55, 165, 65);
@@ -541,15 +543,15 @@ function drawAllFurniture() {
   drawGamingDeskTopDown(dr.x + 30, dr.y + 60, 95, 50);
   rect(dr.x + 40, dr.y + 67, 40, 28, '#1a2a3a');
   rect(dr.x + 42, dr.y + 69, 36, 24, '#0f2035');
-  drawGamingChairTopDown(dr.x + 64, dr.y + 110);   // reader chair under SIT_POS
+  drawGamingChairTopDown(dr.x + 47, dr.y + 110);   // reader chair under SIT_POS (x510)
   drawGamingDeskTopDown(dr.x + 200, dr.y + 60, 95, 50);
   rect(dr.x + 210, dr.y + 67, 40, 28, '#1a2a3a');
   rect(dr.x + 212, dr.y + 69, 36, 24, '#0f2035');
-  drawGamingChairTopDown(dr.x + 234, dr.y + 110);  // coder chair under SIT_POS
+  drawGamingChairTopDown(dr.x + 217, dr.y + 110);  // coder chair under SIT_POS (x680)
   drawGamingDeskTopDown(dr.x + 323, dr.y + 60, 95, 50);  // 450+323=773
   rect(dr.x + 333, dr.y + 67, 40, 28, '#1a2a3a');
   rect(dr.x + 335, dr.y + 69, 36, 24, '#0f2035');
-  drawGamingChairTopDown(dr.x + 357, dr.y + 110);  // writer chair under SIT_POS
+  drawGamingChairTopDown(dr.x + 340, dr.y + 110);  // writer chair under SIT_POS (x803)
   drawServerRackTopDown(dr.x + ROOM_W - 45, dr.y + WALL + 10);
   // dev extras
   drawWhiteboardTopDown(dr.x + 110, dr.y + WALL + 4, 120);
@@ -563,7 +565,7 @@ function drawAllFurniture() {
   drawGamingDeskTopDown(or.x + 25, or.y + 55, 95, 50);
   rect(or.x + 35, or.y + 62, 40, 28, '#1a2a3a');
   rect(or.x + 37, or.y + 64, 36, 24, '#001a00');
-  drawGamingChairTopDown(or.x + 59, or.y + 105);   // searcher chair under SIT_POS
+  drawGamingChairTopDown(or.x + 42, or.y + 105);   // searcher chair under SIT_POS (x55)
   rect(or.x + 170, or.y + WALL + 6, 60, 20, '#111');
   rect(or.x + 172, or.y + WALL + 8, 56, 16, '#001a00');
   rect(or.x + 260, or.y + WALL + 6, 60, 20, '#111');
@@ -1896,26 +1898,26 @@ function update(dt) {
   }
 }
 
+// When an agent is seated (facing the desk, back to viewer), draw the chair
+// back OVER its lower body — so the chair occludes the legs from the front,
+// aligned with the screen the agent is working at.
 function drawDeskFronts() {
   for (const [key, ag] of Object.entries(agents)) {
     const seated =
       ag.state === 'working' ||
       ag.state === 'desk_linger' ||
-      (ag.state === 'idle_desk'     && ag._deskArrived) ||
-      (ag.state === 'writer_flow' && ag._wPhase && ag._wPhase !== 'walking_desk') ||
-      (ag.state === 'jamesmie_flow' && ag._jPhase && ag._jPhase !== 'walking_desk');
+      (ag.state === 'idle_desk'   && ag._deskArrived) ||
+      (ag.state === 'writer_flow' && ag._wPhase && ag._wPhase !== 'walking_desk');
     if (!seated) continue;
-    const d = DESK_FRONTS[key];
-    const deskFn = DESKS[key];
-    if (!d || !deskFn) continue;
-    // Clip to the lower band and redraw the real desk so it blends seamlessly
-    // (no flat panel that looks like a door opening/closing as agents sit/leave).
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(d.x - 6, d.y, d.w + 12, d.h + 10);
-    ctx.clip();
-    deskFn();
-    ctx.restore();
+    const sp = SIT_POS[key];
+    if (!sp) continue;
+    const gaming = key !== 'jamesmie' && key !== 'manager';
+    const cw = 34, x = Math.round(sp.x - cw / 2), y = Math.round(sp.y - 13), h = 24;
+    shadow(x, y, cw, h);
+    rect(x, y, cw, h, gaming ? '#161616' : '#3a2c1a');                 // chair body
+    rect(x + 3, y + 2, cw - 6, h - 5, gaming ? '#262626' : '#4a3a26'); // cushion
+    rect(x + 3, y, cw - 6, 3, gaming ? '#a01010' : '#6a5240');         // top trim
+    rect(x + cw / 2 - 2, y + 4, 4, h - 8, gaming ? '#3a3a3a' : '#52402c'); // center seam
   }
 }
 
