@@ -109,6 +109,21 @@ const WORK_POS = {
   coder:    { x: 700, y: 158 },  // in front of coder desk
   searcher: { x: 70,  y: 410 },  // in front of ops desk (desk front at y=405)
 };
+// "In-chair" point behind each desk: agent walks here to sit and work.
+const SIT_POS = {
+  jamesmie: { x: 100, y: 150 },  // boss desk 25..175 x, 100..155 y
+  reader:   { x: 527, y: 148 },  // dev desk 480..575 x, 100..150 y
+  coder:    { x: 697, y: 148 },  // dev desk 650..745 x, 100..150 y
+  searcher: { x: 72,  y: 400 },  // ops desk 25..120 x, 355..405 y
+};
+
+// Lower band of each desk, redrawn over a sitting agent to occlude the legs.
+const DESK_FRONTS = {
+  jamesmie: { x: 25,  y: 138, w: 150, h: 22, color: C.deskWalnut },
+  reader:   { x: 480, y: 132, w: 95,  h: 22, color: C.deskGaming },
+  coder:    { x: 650, y: 132, w: 95,  h: 22, color: C.deskGaming },
+  searcher: { x: 25,  y: 387, w: 95,  h: 22, color: C.deskGaming },
+};
 const IDLE_POS = {
   coffee: { x: 855, y: 355 },    // just below coffee machine
   sofa:   { x: 575, y: 428 },    // at sofa center-front
@@ -744,11 +759,12 @@ function drawAgent(agent) {
   const x = Math.round(agent.pos.x - sprW / 2);
   const y = Math.round(agent.pos.y - sprH);
 
-  const facing = (agent._lastDY < 0) ? 'up' : 'down';
+  let facing = (agent._lastDY < 0) ? 'up' : 'down';
+  if (agent.state === 'working') facing = 'down';
   const spr = agent.sprites[facing];
 
   let grid;
-  if (agent.state === 'idle_chill' || agent.state === 'idle_phone') {
+  if (agent.state === 'idle_chill' || agent.state === 'idle_phone' || agent.state === 'working') {
     grid = spr.stand;
   } else {
     const wf = [spr.stand, spr.walk1, spr.stand, spr.walk2];
@@ -855,18 +871,43 @@ function _activateAgent(agentKey, label, ts) {
   ag.speechTimer = 0;
   ag._idleInit = false;
   ag.state = 'walking_to_desk';
-  ag.targetPos = { x: WORK_POS[agentKey].x, y: WORK_POS[agentKey].y };
+  const dest = SIT_POS[agentKey] || WORK_POS[agentKey];
+  ag.targetPos = { x: dest.x, y: dest.y };
 }
 
 function _completeAgent(agentKey, ts) {
   const ag = agents[agentKey];
   if (!ag || ts <= ag.lastCompletedTs) return;
   ag.lastCompletedTs = ts;
-  if (ag.state === 'working' || ag.state === 'walking_to_desk') {
+  if (ag.state === 'working') {
     ag.state = 'done_flash';
     ag.taskLabel = '✅ Done';
     ag._doneTimer = 1200;
+  } else if (ag.state === 'walking_to_desk') {
+    ag._pendingComplete = true;
   }
+}
+
+let _lastProcessedTs = 0;
+let _animQueue = [];
+let _animBusy = false;
+
+// Skip historical events on page load — only animate new ones
+fetch('./agent-events.json?_=' + Date.now())
+  .then(r => r.json())
+  .then(data => {
+    if (data.events && data.events.length > 0) {
+      _lastProcessedTs = Math.max(...data.events.map(e => e.ts));
+    }
+  })
+  .catch(() => {});
+
+function _processAnimQueue() {
+  if (_animBusy || _animQueue.length === 0) return;
+  _animBusy = true;
+  const ev = _animQueue.shift();
+  _activateAgent(ev.agent, ev.label, ev.ts);
+  setTimeout(() => { _animBusy = false; _processAnimQueue(); }, 2800);
 }
 
 async function fetchEvents() {
@@ -875,11 +916,13 @@ async function fetchEvents() {
     if (!r.ok) return;
     const data = await r.json();
 
-    if (data.current && data.current.status === 'active') {
-      _activateAgent(data.current.agent, data.current.label, data.current.timestamp);
-    }
-    if (data.last_completed) {
-      _completeAgent(data.last_completed.agent, data.last_completed.timestamp);
+    if (data.events) {
+      const fresh = data.events.filter(e => e.ts > _lastProcessedTs);
+      if (fresh.length > 0) {
+        _lastProcessedTs = Math.max(...fresh.map(e => e.ts));
+        _animQueue.push(...fresh);
+        _processAnimQueue();
+      }
     }
     if (data.user_message) {
       triggerJamesmie(data.user_message.text, data.user_message.timestamp);
@@ -1034,10 +1077,21 @@ function update(dt) {
     if (ag.state === 'walking_to_desk') {
       const arrived = moveToward(ag, ag.targetPos, dt);
       if (arrived) {
+        ag._pendingComplete = false;
         ag.state = 'working';
+        ag._workTimer = 1800;
+        ag.speechText = '💻';
+        ag.speechTimer = 1800;
       }
     }
-    // 'working' state: task bubble pulses — no extra logic needed here
+    if (ag.state === 'working' && ag._workTimer > 0) {
+      ag._workTimer -= dt;
+      if (ag._workTimer <= 0) {
+        ag.state = 'done_flash';
+        ag.taskLabel = '✅ Done';
+        ag._doneTimer = 1200;
+      }
+    }
     // 'done_flash' state: _doneTimer handled in the timer tick block above
   }
   // ---- JAMESMIE ACTIVE FLOW ----
@@ -1081,12 +1135,23 @@ function update(dt) {
   }
 }
 
+function drawDeskFronts() {
+  for (const [key, ag] of Object.entries(agents)) {
+    if (ag.state !== 'working') continue;
+    const d = DESK_FRONTS[key];
+    if (!d) continue;
+    rect(d.x, d.y, d.w, d.h, d.color);
+    rect(d.x, d.y, d.w, 3, 'rgba(255,255,255,0.08)');  // top highlight edge
+  }
+}
+
 function draw() {
   ctx.clearRect(0, 0, W, H);
   drawAllRooms();
   drawAllFurniture();
   const sorted = Object.values(agents).sort((a, b) => a.pos.y - b.pos.y);
   for (const ag of sorted) drawAgent(ag);
+  drawDeskFronts();
   drawHeader();
 }
 
