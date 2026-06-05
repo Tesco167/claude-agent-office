@@ -35,6 +35,48 @@ def extract_label(tool_name, tool_input):
         return f"{icon} {host}"
     return f"{icon} {tool_name}"
 
+def _collapse(s, limit=160):
+    """Flatten whitespace/newlines to single spaces for a marquee-friendly line."""
+    return ' '.join(str(s).split())[:limit]
+
+def extract_detail(tool_name, tool_input):
+    """Second line for the Editor: a flowing summary of WHAT changed.
+    Returns '' for tools that don't edit files."""
+    if tool_name == 'Edit':
+        old = tool_input.get('old_string', '') or ''
+        new = tool_input.get('new_string', '') or ''
+        added = new.count('\n') + (1 if new else 0)
+        removed = old.count('\n') + (1 if old else 0)
+        tag = '↻ all' if tool_input.get('replace_all') else f'+{added}/-{removed}'
+        preview = _collapse(new) or '(deleted)'
+        return f'{tag}  »  {preview}'
+    if tool_name == 'Write':
+        content = tool_input.get('content', '') or ''
+        lines = content.count('\n') + (1 if content else 0)
+        return f'write {lines} lines  »  {_collapse(content)}'
+    if tool_name == 'NotebookEdit':
+        src = tool_input.get('new_source', '') or ''
+        return f'cell  »  {_collapse(src)}'
+    # Reader tools
+    if tool_name == 'Read':
+        return f'open  »  {_collapse(tool_input.get("file_path", ""))}'
+    if tool_name == 'Glob':
+        pat = tool_input.get('pattern', '') or ''
+        loc = tool_input.get('path', '') or ''
+        return f'glob  »  {_collapse(pat + ("  in " + loc if loc else ""))}'
+    if tool_name == 'Grep':
+        pat = tool_input.get('pattern', '') or ''
+        loc = tool_input.get('path', '') or tool_input.get('glob', '') or '.'
+        return f'grep  »  {_collapse(pat)}  in {_collapse(loc, 60)}'
+    # Searcher tools
+    if tool_name == 'Bash':
+        return f'run  »  {_collapse(tool_input.get("command", ""))}'
+    if tool_name == 'WebSearch':
+        return f'search  »  {_collapse(tool_input.get("query", ""))}'
+    if tool_name == 'WebFetch':
+        return f'fetch  »  {_collapse(tool_input.get("url", ""))}'
+    return ''
+
 def last_assistant_text(transcript_path):
     """Return the latest assistant text message from a JSONL transcript, or None."""
     try:
@@ -99,21 +141,34 @@ def main():
     tool_input = payload.get('tool_input') or {}
     agent = TOOL_TO_AGENT.get(tool_name)
 
+    # The assistant's narration accompanying this tool call is the latest
+    # assistant text in the transcript → the Writer voices it (flowing, 1 row).
+    # Captured for every PreToolUse, even tools with no office agent.
+    if mode == 'pre':
+        narration = last_assistant_text(payload.get('transcript_path', ''))
+        if narration:
+            existing['writer_message'] = {'text': narration[:200], 'timestamp': ts}
+        if not agent:
+            atomic_write(events_path, existing)   # persist narration even for unmapped tools
+            sys.exit(0)
+
     if not agent:
         sys.exit(0)
 
     label = extract_label(tool_name, tool_input)
+    detail = extract_detail(tool_name, tool_input)
 
     if mode == 'pre':
         existing['current'] = {
             'tool': tool_name,
             'agent': agent,
             'label': label,
+            'detail': detail,
             'status': 'active',
             'timestamp': ts,
         }
         existing.setdefault('events', [])
-        existing['events'].append({'agent': agent, 'label': label, 'ts': ts})
+        existing['events'].append({'agent': agent, 'label': label, 'detail': detail, 'ts': ts})
         existing['events'] = existing['events'][-10:]
     elif mode == 'post':
         if (existing.get('current')
