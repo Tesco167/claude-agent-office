@@ -538,15 +538,31 @@ function drawAllFurniture() {
   drawPlantTopDown(lg.x + 250, lg.y + ROOM_H - 38);
 }
 
-function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = null) {
+// Darken/lighten a #rrggbb hex by a factor (clamped to 0..255).
+function shadeHex(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  const b = Math.min(255, Math.round((n & 255) * f));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = null, scale = S) {
+  const hair = hairColor || C.hair;
   const colorMap = {
-    's': C.skin, 'h': hairColor || C.hair, 'b': bodyColor,
+    's': C.skin, 'h': hair, 'b': bodyColor,
     'l': C.leg,  'w': C.white, 'c': C.crown, 'e': '#2d1b00',
     'z': C.shoe,
+    'd': shadeHex(C.skin, 0.88),     // skin shadow
+    'm': '#b56b5a',                  // mouth
+    'g': '#1a1a1a',                  // glasses / dark detail
+    'H': shadeHex(hair, 0.72),       // hair shadow
+    'k': shadeHex(bodyColor, 0.74),  // body shadow
+    'B': shadeHex(bodyColor, 1.18),  // body highlight
   };
   const cols = grid[0].length;
   const rows = grid.length;
-  const sprW = cols * S;
+  const sprW = cols * scale;
 
   ctx.save();
   if (facingLeft) {
@@ -557,7 +573,7 @@ function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = nul
         const ch = grid[r][c];
         if (ch === '.') continue;
         ctx.fillStyle = colorMap[ch] || '#ff00ff';
-        ctx.fillRect(c * S, r * S, S, S);
+        ctx.fillRect(c * scale, r * scale, scale, scale);
       }
     }
   } else {
@@ -566,7 +582,7 @@ function drawSprite(grid, cx, cy, bodyColor, facingLeft = false, hairColor = nul
         const ch = grid[r][c];
         if (ch === '.') continue;
         ctx.fillStyle = colorMap[ch] || '#ff00ff';
-        ctx.fillRect(cx + c * S, cy + r * S, S, S);
+        ctx.fillRect(cx + c * scale, cy + r * scale, scale, scale);
       }
     }
   }
@@ -810,6 +826,94 @@ const SPRITES_WRITER = {
 };
 
 // ============================================================
+// HIGH-RES SPRITES (24-wide, drawn at spriteScale 2) — finer detail.
+// Shading keys: H hair-shadow, d skin-shadow, m mouth, g glasses,
+//               k body-shadow, B body-highlight.
+// ============================================================
+const READER2_UPPER_DOWN = [
+  '........hhhhhhhh........',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhHHHHHHHHHHhhh....',
+  '....hhhssssssssssHhh....',
+  '...hhssssssssssssshh....',
+  '...hhsggssssssggsshh....',
+  '...hhsgegssssgegsshh....',
+  '...hhsggssssssggsshh....',
+  '....hhsssssddssssssh....',
+  '....hhssssmmmmsssssh....',
+  '....hhsssssssssssssh....',
+  '.....hhsssssssssshh.....',
+  '......wwwwwwwwwwww......',
+  '.....wbbbbbbbbbbbbw.....',
+  '....bbbbbbbbbbbbbbbb....',
+  '....bbbkbbbbbbbbBbbb....',
+  '....sbbkbbbbbbbbBbbs....',
+  '....sbbbbbbbbbbbbbbs....',
+  '.....bbbbbbbbbbbbbb.....',
+  '.....bbbkbbbbbbBbbb.....',
+  '......bbbbbbbbbbbb......',
+];
+const READER2_UPPER_UP = [
+  '........hhhhhhhh........',
+  '......hhhhhhhhhhhh......',
+  '.....hhhhhhhhhhhhhh.....',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhHHHHHHHHHHhhh....',
+  '....hhhhHHHHHHHHhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhhh....',
+  '....hhhhhhhhhhhhhhh.....',
+  '.....hhhhhhhhhhhhhh.....',
+  '......hhhhhhhhhhhh......',
+  '.....hhsssssssssshh.....',
+  '......wwwwwwwwwwww......',
+  '.....wbbbbbbbbbbbbw.....',
+  '....bbbbbbbbbbbbbbbb....',
+  '....bbbBbbbbbbbbkbbb....',
+  '....sbbBbbbbbbbbkbbs....',
+  '....sbbbbbbbbbbbbbbs....',
+  '.....bbbbbbbbbbbbbb.....',
+  '.....bbbBbbbbbbkbbb.....',
+  '......bbbbbbbbbbbb......',
+];
+const LEGS24_STAND = [
+  '.......llll..llll.......',
+  '.......llll..llll.......',
+  '.......lkll..llkl.......',
+  '.......llll..llll.......',
+  '.......llll..llll.......',
+  '.......zzzz..zzzz.......',
+  '.......zzzzzzzzzz.......',
+  '.......zzzzzzzzzz.......',
+];
+const LEGS24_WALK1 = [
+  '.......lll....ll........',
+  '.......llll...ll........',
+  '.......lkll...ll........',
+  '.......llll...ll........',
+  '.......zzz....ll........',
+  '.......zzzz...zz........',
+  '.......zzzz..zzzz.......',
+  '.......zzz...zzz........',
+];
+const LEGS24_WALK2 = [
+  '.......ll....lll........',
+  '.......ll...llll........',
+  '.......ll...llkl........',
+  '.......ll...llll........',
+  '.......ll....zzz........',
+  '.......zz...zzzz........',
+  '.......zzzz..zzzz.......',
+  '.......zzz...zzz........',
+];
+const SPRITES_READER2 = {
+  down: { stand: [...READER2_UPPER_DOWN, ...LEGS24_STAND], walk1: [...READER2_UPPER_DOWN, ...LEGS24_WALK1], walk2: [...READER2_UPPER_DOWN, ...LEGS24_WALK2] },
+  up:   { stand: [...READER2_UPPER_UP,   ...LEGS24_STAND], walk1: [...READER2_UPPER_UP,   ...LEGS24_WALK1], walk2: [...READER2_UPPER_UP,   ...LEGS24_WALK2] },
+};
+
+// ============================================================
 // AGENT OBJECTS
 // ============================================================
 const agents = {
@@ -827,7 +931,7 @@ const agents = {
   },
   reader: {
     name: 'Reader', color: C.readerBlue,
-    hairColor: '#8b4513', sprites: SPRITES_READER, _lastDY: 1,
+    hairColor: '#8b4513', sprites: SPRITES_READER2, spriteScale: 2, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 350, y: 300 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -913,7 +1017,7 @@ function moveToward(agent, target, dt) {
 // ============================================================
 function drawBubble(agent, text_, isTask) {
   const bx = agent.pos.x;
-  const by = agent.pos.y - 20 * S - 14;
+  const by = agent.pos.y - (agent._sprH || 20 * S) - 14;
   ctx.save();
   ctx.font = '12px "Leelawadee UI","Tahoma",sans-serif';
   const measured = ctx.measureText(text_).width;
@@ -950,11 +1054,6 @@ function drawBubble(agent, text_, isTask) {
 }
 
 function drawAgent(agent) {
-  const sprW = 16 * S;
-  const sprH = 20 * S;
-  const x = Math.round(agent.pos.x - sprW / 2);
-  const y = Math.round(agent.pos.y - sprH);
-
   // Seated = working, or in a flow phase past the walk to the desk.
   // While walking_desk the agent should still face its travel direction and animate.
   const seated =
@@ -975,7 +1074,16 @@ function drawAgent(agent) {
     grid = wf[agent.frameIdx];
   }
 
-  drawSprite(grid, x, y, agent.color, agent.facingLeft, agent.hairColor);
+  // Dimensions come from the chosen grid + per-sprite scale, so sprites of
+  // different resolutions (e.g. high-res 24-wide at scale 2) render correctly.
+  const sc = agent.spriteScale || S;
+  const sprW = grid[0].length * sc;
+  const sprH = grid.length * sc;
+  agent._sprH = sprH;
+  const x = Math.round(agent.pos.x - sprW / 2);
+  const y = Math.round(agent.pos.y - sprH);
+
+  drawSprite(grid, x, y, agent.color, agent.facingLeft, agent.hairColor, sc);
 
   const labelFont = '11px "Leelawadee UI","Tahoma",sans-serif';
   ctx.font = labelFont;
