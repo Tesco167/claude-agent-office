@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"s=open\\('office.html',encoding='utf-8'\\).read\\(\\);print\\('braces',s.count\\('{'\\)-s.count\\('}'\\),'parens',s.count\\('\\('\\)-s.count\\('\\)'\\),'brackets',s.count\\('['\\)-s.count\\(']'\\)\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell($tools = @\\('node','deno','bun','chrome','msedge'\\); foreach \\($t in $tools\\) { $c = Get-Command $t -ErrorAction SilentlyContinue; if \\($c\\) { \"$t -> $\\($c.Source\\)\" } else { \"$t -> NOT FOUND\" } }; \"--- python pkgs ---\"; python -c \"import importlib.util as u; [print\\(m, 'OK' if u.find_spec\\(m\\) else 'NO'\\) for m in ['playwright','selenium']]\" 2>$null; \"--- edge exe ---\"; $edge = \"C:\\\\Program Files \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\"; if \\(Test-Path $edge\\) { \"edge exe: present\" } else { \"edge exe: absent\" })"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\rapheephat_ju\\.claude"
+    ]
+  }
+}
