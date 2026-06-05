@@ -128,6 +128,42 @@ const IDLE_POS = {
   coffee: { x: 855, y: 355 },    // just below coffee machine
   sofa:   { x: 575, y: 428 },    // at sofa center-front
 };
+const QUEUE_SPOTS = {
+  coffee: [
+    { x: 855, y: 355 },  // slot 0 — at the machine (brewing)
+    { x: 855, y: 385 },  // slot 1 — first in line
+    { x: 855, y: 415 },  // slot 2 — second in line
+  ],
+  sofa: [
+    { x: 545, y: 428 },  // slot 0 — left seat
+    { x: 595, y: 428 },  // slot 1 — right seat
+  ],
+};
+const queues = { coffee: [], sofa: [] };  // arrays of agent keys; index = slot
+
+function joinQueue(name, key) {
+  const q = queues[name];
+  if (q.includes(key)) return q.indexOf(key);
+  if (q.length >= QUEUE_SPOTS[name].length) return -1;  // full
+  q.push(key);
+  return q.length - 1;
+}
+
+function leaveQueue(name, key) {
+  const q = queues[name];
+  const i = q.indexOf(key);
+  if (i !== -1) q.splice(i, 1);  // everyone behind shifts forward by index
+}
+
+function leaveAllQueues(key) {
+  leaveQueue('coffee', key);
+  leaveQueue('sofa', key);
+}
+
+function queueSlotPos(name, key) {
+  const i = queues[name].indexOf(key);
+  return i === -1 ? null : QUEUE_SPOTS[name][i];
+}
 const CENTER_POS = { x: 450, y: 300 };
 const WALK = { x: 15, y: 55, maxX: 885, maxY: 545 };
 
@@ -688,6 +724,15 @@ const agents = {
   },
 };
 
+const _agentKeyCache = new Map();
+function _agentKey(ag) {
+  if (_agentKeyCache.has(ag)) return _agentKeyCache.get(ag);
+  for (const [k, v] of Object.entries(agents)) {
+    if (v === ag) { _agentKeyCache.set(ag, k); return k; }
+  }
+  return null;
+}
+
 // ============================================================
 // MOVEMENT HELPERS
 // ============================================================
@@ -847,6 +892,7 @@ function triggerJamesmie(text, ts) {
   const jam = agents.jamesmie;
   if (jam.state === 'working' || jam.state === 'walking_to_desk') return;
   _lastJamesmieTs = ts;
+  leaveAllQueues('jamesmie');
 
   const truncated = text.length > 40 ? text.slice(0, 39) + '…' : text;
   jam.state = 'jamesmie_flow';
@@ -865,6 +911,9 @@ function triggerJamesmie(text, ts) {
 function _activateAgent(agentKey, label, ts) {
   const ag = agents[agentKey];
   if (!ag || ts <= ag.lastEventTs) return;
+  leaveAllQueues(agentKey);          // free any queue slot before working
+  ag._coffeeArrived = false;
+  ag._sofaArrived = false;
   ag.lastEventTs = ts;
   ag.taskLabel = label;
   ag.speechText = '';
@@ -1002,24 +1051,31 @@ function update(dt) {
       if (!ag._idleInit) {
         ag._idleInit = true;
         ag.idleDuration = 5000 + Math.random() * 8000;
-      }
-      if (!ag.targetPos) {
-        ag.targetPos = { x: IDLE_POS.coffee.x, y: IDLE_POS.coffee.y };
-      }
-      const atCoffee = moveToward(ag, ag.targetPos, dt);
-      if (atCoffee) {
-        if (!ag._coffeeArrived) {
-          ag._coffeeArrived = true;
-          ag.speechText = '☕';
-          ag.speechTimer = ag.idleDuration;
-        }
-        if (ag.idleTimer > ag.idleDuration) {
+        const slot = joinQueue('coffee', _agentKey(ag));
+        if (slot === -1) {              // queue full → do something else
           ag._idleInit = false;
-          ag._coffeeArrived = false;
           ag.idleTimer = 0;
           ag.targetPos = null;
-          ag.state = _pickIdleState();
+          ag.state = 'idle_wander';
+          continue;
         }
+      }
+      const spot = queueSlotPos('coffee', _agentKey(ag));
+      if (spot) ag.targetPos = { x: spot.x, y: spot.y };
+      const atSpot = moveToward(ag, ag.targetPos, dt);
+      const atFront = queues.coffee.indexOf(_agentKey(ag)) === 0;
+      if (atSpot && atFront && !ag._coffeeArrived) {
+        ag._coffeeArrived = true;
+        ag.speechText = '☕';
+        ag.speechTimer = ag.idleDuration;
+      }
+      if (ag.idleTimer > ag.idleDuration) {
+        leaveQueue('coffee', _agentKey(ag));
+        ag._idleInit = false;
+        ag._coffeeArrived = false;
+        ag.idleTimer = 0;
+        ag.targetPos = null;
+        ag.state = _pickIdleState();
       }
     }
 
@@ -1027,24 +1083,30 @@ function update(dt) {
       if (!ag._idleInit) {
         ag._idleInit = true;
         ag.idleDuration = 7000 + Math.random() * 10000;
-      }
-      if (!ag.targetPos) {
-        ag.targetPos = { x: IDLE_POS.sofa.x, y: IDLE_POS.sofa.y };
-      }
-      const atSofa = moveToward(ag, ag.targetPos, dt);
-      if (atSofa) {
-        if (!ag._sofaArrived) {
-          ag._sofaArrived = true;
-          ag.speechText = '😴';
-          ag.speechTimer = ag.idleDuration;
-        }
-        if (ag.idleTimer > ag.idleDuration) {
+        const slot = joinQueue('sofa', _agentKey(ag));
+        if (slot === -1) {
           ag._idleInit = false;
-          ag._sofaArrived = false;
           ag.idleTimer = 0;
           ag.targetPos = null;
-          ag.state = _pickIdleState();
+          ag.state = 'idle_wander';
+          continue;
         }
+      }
+      const spot = queueSlotPos('sofa', _agentKey(ag));
+      if (spot) ag.targetPos = { x: spot.x, y: spot.y };
+      const atSofa = moveToward(ag, ag.targetPos, dt);
+      if (atSofa && !ag._sofaArrived) {
+        ag._sofaArrived = true;
+        ag.speechText = '😴';
+        ag.speechTimer = ag.idleDuration;
+      }
+      if (ag.idleTimer > ag.idleDuration) {
+        leaveQueue('sofa', _agentKey(ag));
+        ag._idleInit = false;
+        ag._sofaArrived = false;
+        ag.idleTimer = 0;
+        ag.targetPos = null;
+        ag.state = _pickIdleState();
       }
     }
 
