@@ -953,11 +953,12 @@ function drawAgent(agent) {
   const y = Math.round(agent.pos.y - sprH);
 
   let facing = (agent._lastDY < 0) ? 'up' : 'down';
-  if (agent.state === 'working') facing = 'down';
+  if (agent.state === 'working' || agent.state === 'writer_flow' || agent.state === 'jamesmie_flow') facing = 'down';
   const spr = agent.sprites[facing];
 
   let grid;
-  if (agent.state === 'idle_chill' || agent.state === 'idle_phone' || agent.state === 'working') {
+  if (agent.state === 'idle_chill' || agent.state === 'idle_phone' ||
+      agent.state === 'working' || agent.state === 'writer_flow' || agent.state === 'jamesmie_flow') {
     grid = spr.stand;
   } else {
     const wf = [spr.stand, spr.walk1, spr.stand, spr.walk2];
@@ -1053,6 +1054,25 @@ function triggerJamesmie(text, ts) {
   jam._idleInit = false;
 }
 
+let _lastWriterTs = 0;
+
+function triggerWriter(text, ts) {
+  if (!ts || ts <= _lastWriterTs) return;
+  const w = agents.writer;
+  if (w.state === 'working' || w.state === 'walking_to_desk' || w.state === 'writer_flow') return;
+  _lastWriterTs = ts;
+  leaveAllQueues('writer');
+  const truncated = text.length > 40 ? text.slice(0, 39) + '…' : text;
+  w.state = 'writer_flow';
+  w._wMsg = truncated;
+  w._wPhase = 'walking_desk';
+  w._wTimer = 0;
+  w.targetPos = { ...SIT_POS.writer };
+  w.speechText = '';
+  w.taskLabel = '';
+  w._idleInit = false;
+}
+
 // ============================================================
 // EVENT POLLING
 // ============================================================
@@ -1123,6 +1143,9 @@ async function fetchEvents() {
     }
     if (data.user_message) {
       triggerJamesmie(data.user_message.text, data.user_message.timestamp);
+    }
+    if (data.assistant_response) {
+      triggerWriter(data.assistant_response.text, data.assistant_response.timestamp);
     }
   } catch(e) { /* silently ignore */ }
 }
@@ -1351,15 +1374,54 @@ function update(dt) {
       }
     }
   }
+
+  // ---- WRITER FLOW ----
+  const wrt = agents.writer;
+  if (wrt.state === 'writer_flow') {
+    wrt._wTimer += dt;
+
+    if (wrt._wPhase === 'walking_desk') {
+      const arrived = moveToward(wrt, SIT_POS.writer, dt);
+      if (arrived) {
+        wrt._wPhase = 'typing';
+        wrt._wTimer = 0;
+        wrt._lastDY = 1;            // face down (seated)
+        wrt.speechText = '✍️';
+        wrt.speechTimer = 1500;
+      }
+    }
+    else if (wrt._wPhase === 'typing') {
+      if (wrt._wTimer > 1500) {
+        wrt._wPhase = 'replying';
+        wrt._wTimer = 0;
+        wrt.speechText = wrt._wMsg;   // real reply text
+        wrt.speechTimer = 3500;
+      }
+    }
+    else if (wrt._wPhase === 'replying') {
+      if (wrt._wTimer > 3500) {
+        wrt._wPhase = null;
+        wrt.speechText = '';
+        wrt.state = 'idle_wander';
+        wrt.targetPos = null;
+        wrt._idleInit = false;
+        wrt.idleTimer = 0;
+      }
+    }
+  }
 }
 
 function drawDeskFronts() {
   for (const [key, ag] of Object.entries(agents)) {
-    if (ag.state !== 'working') continue;
+    const seated =
+      ag.state === 'working' ||
+      (ag.state === 'writer_flow' && ag._wPhase && ag._wPhase !== 'walking_desk') ||
+      (ag.state === 'jamesmie_flow' && ag._jPhase && ag._jPhase !== 'walking_desk');
+    if (!seated) continue;
     const d = DESK_FRONTS[key];
     if (!d) continue;
     rect(d.x, d.y, d.w, d.h, d.color);
-    rect(d.x, d.y, d.w, 3, 'rgba(255,255,255,0.08)');  // top highlight edge
+    rect(d.x, d.y, d.w, 3, 'rgba(255,255,255,0.08)');
   }
 }
 
