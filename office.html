@@ -1083,6 +1083,19 @@ function drawAgent(agent) {
   ctx.fill();
   ctx.restore();
 
+  // Persistent "thinking" bubble above the head while actively doing something.
+  const busy = agent.state === 'working' || agent.state === 'walking_to_desk' ||
+               agent.state === 'jamesmie_flow' || agent.state === 'writer_flow';
+  if (busy) {
+    const bob = Math.sin(_lastTs / 350 + agent.pos.x * 0.1) * 2;
+    ctx.save();
+    ctx.font = '15px "Leelawadee UI","Tahoma",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💭', agent.pos.x + sprW * 0.5, y + 4 + bob);
+    ctx.restore();
+  }
+
   if (agent.taskLabel)  drawBubble(agent, agent.taskLabel, true);
   if (agent.speechText) drawBubble(agent, agent.speechText, false);
 }
