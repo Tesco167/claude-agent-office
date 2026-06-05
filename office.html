@@ -127,6 +127,9 @@ const DESK_FRONTS = {
   searcher: { x: 25,  y: 387, w: 95,  h: 22, color: C.deskGaming },
   writer:   { x: 773, y: 132, w: 95,  h: 22, color: C.deskGaming },
 };
+// After finishing work, agents stay seated this long before wandering off —
+// prevents pacing back and forth when tool calls arrive in bursts.
+const DESK_LINGER_MS = 300000;  // 5 minutes
 const IDLE_POS = {
   coffee: { x: 855, y: 355 },    // just below coffee machine
   sofa:   { x: 575, y: 428 },    // at sofa center-front
@@ -956,6 +959,7 @@ function drawAgent(agent) {
   // While walking_desk the agent should still face its travel direction and animate.
   const seated =
     agent.state === 'working' ||
+    agent.state === 'desk_linger' ||
     (agent.state === 'writer_flow'   && agent._wPhase && agent._wPhase !== 'walking_desk') ||
     (agent.state === 'jamesmie_flow' && agent._jPhase && agent._jPhase !== 'walking_desk');
 
@@ -1097,6 +1101,14 @@ function _activateAgent(agentKey, label, ts) {
   ag.speechText = '';
   ag.speechTimer = 0;
   ag._idleInit = false;
+  // Already at the desk (working or lingering)? Resume in place — no walk back.
+  if (ag.state === 'working' || ag.state === 'desk_linger') {
+    ag.state = 'working';
+    ag._workTimer = 1800;
+    ag.speechText = '💻';
+    ag.speechTimer = 1800;
+    return;
+  }
   ag.state = 'walking_to_desk';
   const dest = SIT_POS[agentKey] || WORK_POS[agentKey];
   ag.targetPos = { x: dest.x, y: dest.y };
@@ -1183,7 +1195,8 @@ function update(dt) {
       if (ag._doneTimer <= 0) {
         ag._doneTimer = 0;
         ag.taskLabel = '';
-        ag.state = 'idle_wander';
+        ag.state = 'desk_linger';        // stay seated to avoid pacing back and forth
+        ag._lingerTimer = DESK_LINGER_MS;
         ag.targetPos = null;
         ag.idleTimer = 0;
       }
@@ -1336,6 +1349,14 @@ function update(dt) {
       }
     }
     // 'done_flash' state: _doneTimer handled in the timer tick block above
+    if (ag.state === 'desk_linger') {
+      ag._lingerTimer -= dt;
+      if (ag._lingerTimer <= 0) {
+        ag.state = 'idle_wander';
+        ag.targetPos = null;
+        ag.idleTimer = 0;
+      }
+    }
   }
   // ---- JAMESMIE DELEGATION FLOW ----
   const jam = agents.jamesmie;
@@ -1412,7 +1433,8 @@ function update(dt) {
       if (wrt._wTimer > 3500) {
         wrt._wPhase = null;
         wrt.speechText = '';
-        wrt.state = 'idle_wander';
+        wrt.state = 'desk_linger';       // linger at desk like the others
+        wrt._lingerTimer = DESK_LINGER_MS;
         wrt.targetPos = null;
         wrt._idleInit = false;
         wrt.idleTimer = 0;
@@ -1425,6 +1447,7 @@ function drawDeskFronts() {
   for (const [key, ag] of Object.entries(agents)) {
     const seated =
       ag.state === 'working' ||
+      ag.state === 'desk_linger' ||
       (ag.state === 'writer_flow' && ag._wPhase && ag._wPhase !== 'walking_desk') ||
       (ag.state === 'jamesmie_flow' && ag._jPhase && ag._jPhase !== 'walking_desk');
     if (!seated) continue;
