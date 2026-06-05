@@ -901,7 +901,7 @@ const SPRITES_WRITER2 = {
 // ============================================================
 const agents = {
   jamesmie: {
-    name: 'Jamesmie', color: C.jamesGold,
+    name: 'Jamesmie', color: C.jamesGold, home: 'boss',
     hairColor: '#1a0a00', sprites: SPRITES_JAMESMIE2, spriteScale: 2, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 100, y: 320 }, targetPos: null,
@@ -913,7 +913,7 @@ const agents = {
     lastEventTs: 0, lastCompletedTs: 0,
   },
   reader: {
-    name: 'Reader', color: C.readerBlue,
+    name: 'Reader', color: C.readerBlue, home: 'dev',
     hairColor: '#8b4513', sprites: SPRITES_READER2, spriteScale: 2, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 350, y: 300 }, targetPos: null,
@@ -925,7 +925,7 @@ const agents = {
     lastEventTs: 0, lastCompletedTs: 0,
   },
   coder: {
-    name: 'Coder', color: C.coderGreen,
+    name: 'Coder', color: C.coderGreen, home: 'dev',
     hairColor: '#1a237e', sprites: SPRITES_CODER2, spriteScale: 2, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 500, y: 340 }, targetPos: null,
@@ -937,7 +937,7 @@ const agents = {
     lastEventTs: 0, lastCompletedTs: 0,
   },
   searcher: {
-    name: 'Searcher', color: C.searchOrange,
+    name: 'Searcher', color: C.searchOrange, home: 'ops',
     hairColor: '#6b0f1a', sprites: SPRITES_SEARCHER2, spriteScale: 2, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 200, y: 380 }, targetPos: null,
@@ -949,7 +949,7 @@ const agents = {
     lastEventTs: 0, lastCompletedTs: 0,
   },
   writer: {
-    name: 'Writer', color: C.writerTeal,
+    name: 'Writer', color: C.writerTeal, home: 'dev',
     hairColor: '#0f3a35', sprites: SPRITES_WRITER2, spriteScale: 2, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 600, y: 250 }, targetPos: null,
@@ -1042,6 +1042,7 @@ function drawAgent(agent) {
   const seated =
     agent.state === 'working' ||
     agent.state === 'desk_linger' ||
+    (agent.state === 'idle_desk'     && agent._deskArrived) ||
     (agent.state === 'writer_flow'   && agent._wPhase && agent._wPhase !== 'walking_desk') ||
     (agent.state === 'jamesmie_flow' && agent._jPhase && agent._jPhase !== 'walking_desk');
 
@@ -1101,9 +1102,10 @@ const CHAT_PHRASES = [
 
 function _pickIdleState() {
   const r = Math.random();
-  if (r < 0.40) return 'idle_wander';
-  if (r < 0.60) return 'idle_phone';
-  if (r < 0.80) return 'idle_coffee';
+  if (r < 0.32) return 'idle_wander';
+  if (r < 0.52) return 'idle_desk';     // relax at own desk
+  if (r < 0.66) return 'idle_phone';
+  if (r < 0.83) return 'idle_coffee';
   return 'idle_chill';
 }
 
@@ -1114,7 +1116,8 @@ function _checkChat() {
     ag !== agents.jamesmie &&
     ag.state.startsWith('idle') &&
     ag.state !== 'idle_chat' &&
-    ag.state !== 'idle_chat_walk'
+    ag.state !== 'idle_chat_walk' &&
+    ag.state !== 'idle_desk'
   );
   for (let i = 0; i < idleList.length; i++) {
     for (let j = i + 1; j < idleList.length; j++) {
@@ -1300,10 +1303,15 @@ function update(dt) {
 
     if (ag.state === 'idle_wander') {
       if (!ag.targetPos) {
+        // Wander only within the agent's home room (coffee/sofa states still visit the lounge).
+        const rm = ROOMS[ag.home] || ROOMS.dev;
+        const m = 16;
+        const x0 = rm.x + WALL + m, x1 = rm.x + rm.w - WALL - m;
+        const y0 = rm.y + 30, y1 = rm.y + rm.h - WALL - m;
         let px, py, attempts = 0;
         do {
-          px = WALK.x + Math.random() * (WALK.maxX - WALK.x);
-          py = WALK.y + Math.random() * (WALK.maxY - WALK.y);
+          px = x0 + Math.random() * (x1 - x0);
+          py = y0 + Math.random() * (y1 - y0);
           attempts++;
         } while (isInsideObstacle(px, py) && attempts < 20);
         ag.targetPos = { x: px, y: py };
@@ -1315,6 +1323,35 @@ function update(dt) {
         ag.idleTimer = 0;
         ag.targetPos = null;
         ag.state = _pickIdleState();
+      }
+    }
+
+    else if (ag.state === 'idle_desk') {
+      // relax at own desk: walk there, sit, show a chill emoji
+      if (!ag._idleInit) {
+        ag._idleInit = true;
+        ag.idleDuration = 6000 + Math.random() * 9000;
+        const sp = SIT_POS[_agentKey(ag)];
+        ag.targetPos = sp ? { x: sp.x, y: sp.y } : null;
+        ag._deskEmoji = ['☕', '🎮', '😌', '🎧', '📖'][Math.floor(Math.random() * 5)];
+      }
+      if (!ag.targetPos) { ag._idleInit = false; ag.idleTimer = 0; ag.state = 'idle_wander'; continue; }
+      const atDesk = moveToward(ag, ag.targetPos, dt);
+      if (atDesk) {
+        ag._lastDY = 1;            // face down (seated)
+        if (!ag._deskArrived) {
+          ag._deskArrived = true;
+          ag.speechText = ag._deskEmoji;
+          ag.speechTimer = ag.idleDuration;
+        }
+        if (ag.idleTimer > ag.idleDuration) {
+          ag._idleInit = false;
+          ag._deskArrived = false;
+          ag.idleTimer = 0;
+          ag.targetPos = null;
+          ag.speechText = '';
+          ag.state = 'idle_wander';
+        }
       }
     }
 
@@ -1539,6 +1576,7 @@ function drawDeskFronts() {
     const seated =
       ag.state === 'working' ||
       ag.state === 'desk_linger' ||
+      (ag.state === 'idle_desk'     && ag._deskArrived) ||
       (ag.state === 'writer_flow' && ag._wPhase && ag._wPhase !== 'walking_desk') ||
       (ag.state === 'jamesmie_flow' && ag._jPhase && ag._jPhase !== 'walking_desk');
     if (!seated) continue;
