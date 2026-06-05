@@ -115,7 +115,7 @@ const WORK_POS = {
 // "In-chair" point — centered on each desk's MONITOR so agent, chair, and
 // screen line up. Agent faces up (back to viewer) here, overlapping the screen.
 const SIT_POS = {
-  manager:  { x: 315, y: 268 },  // monitor 297..333
+  manager:  { x: 315, y: 138 },  // monitor 297..333 (top-wall workstation, desk 90..140)
   jamesmie: { x: 74,  y: 150 },  // monitor 57..91
   reader:   { x: 510, y: 148 },  // monitor 492..528
   coder:    { x: 680, y: 148 },  // monitor 662..698
@@ -147,7 +147,7 @@ const DESKS = {
 const DESK_LINGER_MS = 300000;  // 5 minutes
 const IDLE_POS = {
   coffee: { x: 855, y: 355 },    // just below coffee machine
-  sofa:   { x: 575, y: 428 },    // at sofa center-front
+  sofa:   { x: 675, y: 442 },    // at centered sofa front
 };
 const QUEUE_SPOTS = {
   coffee: [
@@ -156,8 +156,8 @@ const QUEUE_SPOTS = {
     { x: 855, y: 415 },  // slot 2 — second in line
   ],
   sofa: [
-    { x: 545, y: 428 },  // slot 0 — left seat
-    { x: 595, y: 428 },  // slot 1 — right seat
+    { x: 645, y: 442 },  // slot 0 — left seat (centered sofa)
+    { x: 705, y: 442 },  // slot 1 — right seat
   ],
 };
 const queues = { coffee: [], sofa: [] };  // arrays of agent keys; index = slot
@@ -203,7 +203,7 @@ const NAV_OBSTACLES = [
   // boss extras
   { x: 30,  y: 235, w: 90,  h: 30 },   // boss guest sofa
   { x: 195, y: 135, w: 30,  h: 60 },   // boss cabinet
-  { x: 250, y: 225, w: 130, h: 50 },   // manager desk
+  { x: 250, y: 90,  w: 130, h: 50 },   // manager desk (top wall)
   // dev extras
   { x: 858, y: 300, w: 26,  h: 30 },   // dev fridge
   { x: 480, y: 300, w: 52,  h: 24 },   // dev crates
@@ -532,11 +532,11 @@ function drawAllFurniture() {
   drawSofaTopDown(br.x + 30, br.y + 195, 90, 30);
   drawCoffeeTableTopDown(br.x + 50, br.y + 232, 50, 18);
   drawCabinetTopDown(br.x + 195, br.y + 95, 30, 60);
-  // Manager workstation (boss room)
-  drawDeskTopDown(250, 225, 130, 50, C.deskWalnut);
-  rect(295, 232, 40, 26, '#1a2a3a');
-  rect(297, 234, 36, 22, '#0f2035');
-  drawChairTopDown(304, 240, '#4a3a2a');   // under SIT_POS.manager (x315)
+  // Manager workstation (boss room, top wall)
+  drawDeskTopDown(250, 90, 130, 50, C.deskWalnut);
+  rect(295, 97, 40, 26, '#1a2a3a');
+  rect(297, 99, 36, 22, '#0f2035');
+  drawChairTopDown(304, 142, '#4a3a2a');   // under SIT_POS.manager (x315)
 
   // ── DEV ROOM ──
   const dr = ROOMS.dev;
@@ -582,9 +582,9 @@ function drawAllFurniture() {
 
   // ── LOUNGE ──
   const lg = ROOMS.lounge;
-  drawRugTopDown(lg.x + 60, lg.y + 80, 130, 90);
-  drawSofaTopDown(lg.x + 65, lg.y + 85, 120, 38);
-  drawCoffeeTableTopDown(lg.x + 95, lg.y + 135, 55, 30);
+  drawRugTopDown(lg.x + 160, lg.y + 85, 130, 90);
+  drawSofaTopDown(lg.x + 165, lg.y + 100, 120, 38);
+  drawCoffeeTableTopDown(lg.x + 198, lg.y + 150, 55, 30);
   drawCoffeeMachineTopDown(lg.x + ROOM_W - 45, lg.y + WALL + 10);
   drawPlantTopDown(lg.x + WALL + 8, lg.y + WALL + 8);
   drawPlantTopDown(lg.x + ROOM_W - 38, lg.y + ROOM_H - 38);
@@ -1383,11 +1383,11 @@ const CHAT_PHRASES = [
 
 function _pickIdleState() {
   const r = Math.random();
-  if (r < 0.32) return 'idle_wander';
-  if (r < 0.52) return 'idle_desk';     // relax at own desk
-  if (r < 0.66) return 'idle_phone';
-  if (r < 0.83) return 'idle_coffee';
-  return 'idle_chill';
+  if (r < 0.50) return 'idle_desk';     // mostly stay & work at own desk
+  if (r < 0.65) return 'idle_phone';    // at desk
+  if (r < 0.82) return 'idle_coffee';   // relax in the lounge
+  if (r < 0.96) return 'idle_chill';    // lounge sofa
+  return 'idle_wander';                 // rare stroll in own room
 }
 
 let _chatCheckTimer = 0;
@@ -1425,7 +1425,7 @@ function _checkChat() {
 // ============================================================
 let _lastJamesmieTs = 0;
 // Where Jamesmie stands to brief the Manager (just left of the manager desk).
-const MGR_MEET = { x: 235, y: 255 };
+const MGR_MEET = { x: 235, y: 120 };
 // Manager's pending assignments (filled from the tool-call log via _activateAgent).
 let _mgrQueue = [];
 function _mgrEnqueue(key, label) {
@@ -1494,7 +1494,7 @@ function _activateAgent(agentKey, label, ts) {
   // Already at the desk (working or lingering)? Resume in place — no walk back.
   if (ag.state === 'working' || ag.state === 'desk_linger') {
     ag.state = 'working';
-    ag._workTimer = 1800;
+    ag._workTimer = 30000;
     ag.speechText = '💻';
     ag.speechTimer = 1800;
     return;
@@ -1612,7 +1612,7 @@ function update(dt) {
         } while (isInsideObstacle(px, py) && attempts < 20);
         ag.targetPos = { x: px, y: py };
         ag._waypoint = getWaypoint(ag.pos, ag.targetPos);
-        ag.idleDuration = 3000 + Math.random() * 8000;
+        ag.idleDuration = 28000 + Math.random() * 6000;
       }
       const arrived = moveToward(ag, ag.targetPos, dt);
       if (arrived || ag.idleTimer > ag.idleDuration) {
@@ -1626,7 +1626,7 @@ function update(dt) {
       // relax at own desk: walk there, sit, show a chill emoji
       if (!ag._idleInit) {
         ag._idleInit = true;
-        ag.idleDuration = 6000 + Math.random() * 9000;
+        ag.idleDuration = 28000 + Math.random() * 6000;
         const sp = SIT_POS[_agentKey(ag)];
         ag.targetPos = sp ? { x: sp.x, y: sp.y } : null;
         ag._deskEmoji = ['☕', '🎮', '😌', '🎧', '📖'][Math.floor(Math.random() * 5)];
@@ -1654,7 +1654,7 @@ function update(dt) {
     else if (ag.state === 'idle_phone') {
       if (!ag._idleInit) {
         ag._idleInit = true;
-        ag.idleDuration = 4000 + Math.random() * 8000;
+        ag.idleDuration = 28000 + Math.random() * 6000;
         ag.speechText = '📱';
         ag.speechTimer = ag.idleDuration;
       }
@@ -1668,7 +1668,7 @@ function update(dt) {
     else if (ag.state === 'idle_coffee') {
       if (!ag._idleInit) {
         ag._idleInit = true;
-        ag.idleDuration = 5000 + Math.random() * 8000;
+        ag.idleDuration = 28000 + Math.random() * 6000;
         const slot = joinQueue('coffee', _agentKey(ag));
         if (slot === -1) {              // queue full → do something else
           ag._idleInit = false;
@@ -1704,7 +1704,7 @@ function update(dt) {
     else if (ag.state === 'idle_chill') {
       if (!ag._idleInit) {
         ag._idleInit = true;
-        ag.idleDuration = 7000 + Math.random() * 10000;
+        ag.idleDuration = 28000 + Math.random() * 6000;
         const slot = joinQueue('sofa', _agentKey(ag));
         if (slot === -1) {
           ag._idleInit = false;
@@ -1767,7 +1767,7 @@ function update(dt) {
       if (arrived) {
         ag._pendingComplete = false;
         ag.state = 'working';
-        ag._workTimer = 1800;
+        ag._workTimer = 30000;
         ag.speechText = '💻';
         ag.speechTimer = 1800;
       }
