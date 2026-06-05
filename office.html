@@ -1246,7 +1246,6 @@ function distTo(agent, target) {
 
 function moveToward(agent, target, dt) {
   if (!target) return false;   // nothing to move toward this frame
-  agent._lastDY = target.y - agent.pos.y;
   const goal = agent._waypoint || target;
   const dx = goal.x - agent.pos.x;
   const dy = goal.y - agent.pos.y;
@@ -1255,6 +1254,7 @@ function moveToward(agent, target, dt) {
     if (agent._waypoint) { agent._waypoint = null; return false; }
     return true;
   }
+  agent._lastDY = dy;   // face the way we're actually walking (up = back, down = front)
   const step = agent.speed * dt / 1000;
   agent.pos.x += (dx / d) * Math.min(step, d);
   agent.pos.y += (dy / d) * Math.min(step, d);
@@ -1721,10 +1721,13 @@ function update(dt) {
         ag.idleTimer = 0; ag.state = 'idle_wander'; continue;
       }
       const atSofa = moveToward(ag, ag.targetPos, dt);
-      if (atSofa && !ag._sofaArrived) {
-        ag._sofaArrived = true;
-        ag.speechText = '😴';
-        ag.speechTimer = ag.idleDuration;
+      if (atSofa) {
+        ag._lastDY = 1;   // sit facing out (toward the viewer)
+        if (!ag._sofaArrived) {
+          ag._sofaArrived = true;
+          ag.speechText = '😴';
+          ag.speechTimer = ag.idleDuration;
+        }
       }
       if (ag.idleTimer > ag.idleDuration) {
         leaveQueue('sofa', _agentKey(ag));
