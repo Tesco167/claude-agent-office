@@ -78,26 +78,47 @@ def extract_detail(tool_name, tool_input):
     return ''
 
 def last_assistant_text(transcript_path):
-    """Return the latest assistant text message from a JSONL transcript, or None."""
+    """Return the latest assistant text message from a JSONL transcript, or None.
+
+    Reads only the tail of the file outward, so cost stays bounded even when the
+    transcript grows to tens of MB — this runs on EVERY PreToolUse hook, so a full
+    read_text() here would re-load the whole transcript on every tool call and slow
+    the machine down as the session grows. The latest assistant message lives at the
+    end of the file; the window only widens if a huge tool_result line pushes the
+    assistant text further back than the initial 256KB."""
     try:
-        lines = Path(transcript_path).read_text(encoding='utf-8').splitlines()
+        size = os.path.getsize(transcript_path)
     except Exception:
         return None
-    for ln in reversed(lines):
+    window = 256 * 1024
+    while True:
+        start = max(0, size - window)
         try:
-            obj = json.loads(ln)
+            with open(transcript_path, 'rb') as f:
+                f.seek(start)
+                chunk = f.read()
         except Exception:
-            continue
-        if obj.get('type') != 'assistant':
-            continue
-        content = obj.get('message', {}).get('content', [])
-        if not isinstance(content, list):
-            continue
-        texts = [c.get('text') for c in content
-                 if isinstance(c, dict) and c.get('type') == 'text' and c.get('text')]
-        if texts:
-            return texts[-1]
-    return None
+            return None
+        lines = chunk.decode('utf-8', 'ignore').splitlines()
+        if start > 0 and lines:
+            lines = lines[1:]   # drop the (likely truncated) first partial line
+        for ln in reversed(lines):
+            try:
+                obj = json.loads(ln)
+            except Exception:
+                continue
+            if obj.get('type') != 'assistant':
+                continue
+            content = obj.get('message', {}).get('content', [])
+            if not isinstance(content, list):
+                continue
+            texts = [c.get('text') for c in content
+                     if isinstance(c, dict) and c.get('type') == 'text' and c.get('text')]
+            if texts:
+                return texts[-1]
+        if start == 0:
+            return None         # scanned the whole file, nothing found
+        window *= 4             # assistant text is further back — widen and retry
 
 def atomic_write(path, data):
     tmp = str(path) + '.tmp'
