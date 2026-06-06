@@ -979,48 +979,100 @@ const shadeHex = (hex, f) => {
   return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 };
 
-const drawSprite = (grid, cx, cy, bodyColor, facingLeft = false, hairColor = null, scale = S) => {
-  const hair = hairColor || C.hair;
-  const colorMap = {
-    's': C.skin, 'h': hair, 'b': bodyColor,
-    'l': C.leg,  'w': C.white, 'c': C.crown, 'e': '#2d1b00',
-    'z': C.shoe,
-    'd': shadeHex(C.skin, 0.88),     // skin shadow
-    'm': '#b56b5a',                  // mouth
-    'g': '#1a1a1a',                  // dark detail
-    'G': '#9aa0a8',                  // glasses frame (light gray)
-    'i': '#f0f0f0',                  // eye white
-    'H': shadeHex(hair, 0.72),       // hair shadow
-    'k': shadeHex(bodyColor, 0.66),  // body shadow
-    'B': shadeHex(bodyColor, 1.28),  // body highlight
-  };
-  const cols = grid[0].length;
-  const rows = grid.length;
-  const sprW = cols * scale;
-  // Round each cell to the integer grid so fractional scales (e.g. 1.5) tile
-  // seamlessly with no gaps/overlaps.
-  const px = i => Math.round(i * scale);
+// Linear blend from hex toward target hex by t in [0,1] (used for hair specular).
+const blendHex = (hex, target, t) => {
+  const a = parseInt(hex.slice(1), 16), b = parseInt(target.slice(1), 16);
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+};
 
-  ctx.save();
-  if (facingLeft) {
-    ctx.translate(cx + sprW, cy);
-    ctx.scale(-1, 1);
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const ch = grid[r][c];
-        if (ch === '.') continue;
-        ctx.fillStyle = colorMap[ch] || '#ff00ff';
-        ctx.fillRect(px(c), px(r), px(c + 1) - px(c), px(r + 1) - px(r));
+// Depth-shading knobs (spec: "Medium").
+const SHADE_HI = 1.18, SHADE_LO = 0.66, SHADE_SPEC = 0.55;
+const OUTLINE_COLOR = '#0a0a16';
+const FORM_KEYS = new Set(['s', 'h', 'H', 'b', 'B', 'k', 'd', 'D', 'L', 'l', 'z']);
+const HAIR_KEYS = new Set(['h', 'H']);
+const _depthCache = new Map();   // grid(array ref) -> Map(`${body}|${hair}|${skin}` -> color buffer)
+
+const buildColorMap = (bodyColor, hairColor, skinColor) => {
+  const hair = hairColor || C.hair;
+  const skin = skinColor || C.skin;
+  return {
+    's': skin, 'h': hair, 'b': bodyColor,
+    'l': C.leg, 'w': C.white, 'c': C.crown, 'e': '#241405', 'z': C.shoe,
+    'd': shadeHex(skin, 0.84), 'D': shadeHex(skin, 0.70), 'L': shadeHex(skin, 1.12),
+    'm': '#c47b6a', 'g': '#222222', 'G': '#9aa0a8', 'i': '#f7f7f7',
+    'H': shadeHex(hair, 0.72), 'k': shadeHex(bodyColor, 0.66), 'B': shadeHex(bodyColor, 1.28),
+    'p': '#5a5e63', 'P': '#c0c4c8', 'q': '#3a3d44', 'Q': '#56595f',
+    'r': '#a23b3b', 'R': '#c05a5a',
+  };
+};
+
+// Build (once per grid+colors, memoized) a rows×cols buffer of CSS colors with the
+// Medium directional gradient + edge rim + hair specular + 1px outline baked in.
+const depthProcess = (grid, bodyColor, hairColor, skinColor) => {
+  let perGrid = _depthCache.get(grid);
+  if (!perGrid) { perGrid = new Map(); _depthCache.set(grid, perGrid); }
+  const key = `${bodyColor}|${hairColor}|${skinColor}`;
+  const hit = perGrid.get(key);
+  if (hit) return hit;
+
+  const cmap = buildColorMap(bodyColor, hairColor, skinColor);
+  const rows = grid.length, cols = grid[0].length;
+  const filled = (r, c) => r >= 0 && r < rows && c >= 0 && c < cols && grid[r][c] !== '.';
+  const buf = Array.from({ length: rows }, () => new Array(cols).fill(null));
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ch = grid[r][c];
+      if (ch === '.') continue;
+      let col = cmap[ch] || '#ff00ff';
+      if (FORM_KEYS.has(ch)) {
+        const t = ((c / (cols - 1)) + (r / (rows - 1))) / 2;
+        let f = SHADE_HI + (SHADE_LO - SHADE_HI) * t;
+        if (!filled(r + 1, c) || !filled(r, c + 1)) f *= 0.80;
+        else if (!filled(r - 1, c) || !filled(r, c - 1)) f *= 1.10;
+        col = shadeHex(col, f);
       }
+      if (HAIR_KEYS.has(ch) && r < rows * 0.32 && c > cols * 0.18 && c < cols * 0.58 && !filled(r - 1, c)) {
+        col = blendHex(col, '#ffffff', SHADE_SPEC);
+      }
+      buf[r][c] = col;
     }
-  } else {
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const ch = grid[r][c];
-        if (ch === '.') continue;
-        ctx.fillStyle = colorMap[ch] || '#ff00ff';
-        ctx.fillRect(cx + px(c), cy + px(r), px(c + 1) - px(c), px(r + 1) - px(r));
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c] !== '.') continue;
+      let touch = false;
+      for (let dr = -1; dr <= 1 && !touch; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if ((dr || dc) && filled(r + dr, c + dc)) { touch = true; break; }
+        }
       }
+      if (touch) buf[r][c] = OUTLINE_COLOR;
+    }
+  }
+  perGrid.set(key, buf);
+  return buf;
+};
+
+const drawSprite = (grid, cx, cy, bodyColor, facingLeft = false, hairColor = null, skinColor = null, scale = S) => {
+  const buf = depthProcess(grid, bodyColor, hairColor, skinColor);
+  const rows = grid.length, cols = grid[0].length;
+  const sprW = cols * scale;
+  const px = i => Math.round(i * scale);
+  ctx.save();
+  if (facingLeft) { ctx.translate(cx + sprW, cy); ctx.scale(-1, 1); }
+  else { ctx.translate(cx, cy); }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const col = buf[r][c];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(px(c), px(r), px(c + 1) - px(c), px(r + 1) - px(r));
     }
   }
   ctx.restore();
