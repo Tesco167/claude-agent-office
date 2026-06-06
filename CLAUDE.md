@@ -27,6 +27,19 @@ Server runs at `http://localhost:8765/office.html`.
 
 Requirements: Python 3 on `PATH`. `node` is **not installed** (this matters for the visual workflow — see §7).
 
+### Auto-start at login (optional)
+
+To have the dashboard come up by itself when you log in — silently, no console window, and open the browser — register a per-user scheduled task:
+
+```powershell
+.\install-autostart.ps1     # register the AtLogOn task (no Admin needed)
+.\uninstall-autostart.ps1   # remove the task and stop the running server
+```
+
+- `serve.ps1` is the **silent, non-blocking** launcher the task runs: it reuses a live server on 8765 (or kills a stale listener and starts a fresh one), runs `py/serve.py` via `pythonw.exe` (no console window, survives the launcher exiting), then opens the browser. Unlike `start.ps1` it does **not** block — use `start.ps1` for interactive dev (visible console, `Ctrl+C`, live logs); use `serve.ps1` / the task for silent background running.
+- **Why `py/serve.py` and not `pythonw -m http.server`:** under `pythonw` (no console) the std handles are unusable, so http.server's per-request logger aborts every response — the port binds but the browser gets `ERR_EMPTY_RESPONSE`. `py/serve.py` redirects stdout/stderr to the void so logging is a no-op, then serves the repo root. Also note `serve.ps1` **quotes** the script path: the repo path has spaces and `Start-Process -ArgumentList` does not auto-quote on PowerShell 5.1.
+- The task (`SorKhonKaenOffice`) is **per-user** (`LogonType=Interactive`, no stored password → no Admin) and runs only while you are logged on. Test it without logging out via `Start-ScheduledTask -TaskName SorKhonKaenOffice`; inspect via `Get-ScheduledTask SorKhonKaenOffice` or the Task Scheduler GUI.
+
 ---
 
 ## 3. Project layout
@@ -37,7 +50,11 @@ css/style.css            — page chrome (dark bg, centered pixelated canvas, ne
 js/app.js                — the entire app: sprites, room, state machine, polling (~2700 lines)
 js/jquery-3.7.1.min.js   — vendored jQuery (DOM select + $.getJSON polling ONLY)
 py/log-event.py          — Claude Code hook script; writes agent-events.json to the repo root
-start.ps1                — dev server launcher
+py/serve.py              — windowless HTTP server (silences logging) launched by serve.ps1
+start.ps1                — dev server launcher (interactive: visible console, Ctrl+C, blocks)
+serve.ps1                — silent non-blocking launcher (pythonw, no window) for autostart
+install-autostart.ps1    — register the per-user AtLogOn scheduled task
+uninstall-autostart.ps1  — remove the task and stop the running server
 agent-events.json        — runtime state at the repo root (gitignored, created at runtime)
 .claude/settings.json    — project permissions + additionalDirectories
 .vscode/launch.json      — F5 → runs start.ps1

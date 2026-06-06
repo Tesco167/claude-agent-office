@@ -1,15 +1,28 @@
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
+$url = "http://localhost:8765/office.html"
 
 Write-Host "Starting ส. ขอนแก่น Office..." -ForegroundColor Cyan
 
-# Kill any previous server on 8765
-$conn = Get-NetTCPConnection -LocalPort 8765 -ErrorAction SilentlyContinue
-if ($conn) {
-    $pid_ = (Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue).Id
-    if ($pid_) { Stop-Process -Id $pid_ -Force -ErrorAction SilentlyContinue }
-    Start-Sleep -Milliseconds 500
+# If a server is already serving the page, reuse it — don't spawn a duplicate.
+$alreadyServing = $false
+try {
+    $resp = Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+    if ($resp.StatusCode -eq 200) { $alreadyServing = $true }
+} catch { }
+
+if ($alreadyServing) {
+    Write-Host "Server already running at $url - reusing it." -ForegroundColor Green
+    Start-Process $url
+    return
 }
+
+# Port occupied but not serving (stale/dead) -> stop EVERY listener on 8765
+# (filter out OwningProcess 0 from TIME_WAIT entries; kill all, not just one).
+$pids = Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ -gt 0 }
+foreach ($p in $pids) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue }
+if ($pids) { Start-Sleep -Milliseconds 500 }
 
 # Start python HTTP server in background
 $job = Start-Job -ScriptBlock {
@@ -21,7 +34,6 @@ $job = Start-Job -ScriptBlock {
 Start-Sleep 1
 
 # Open browser
-$url = "http://localhost:8765/office.html"
 try {
     $resp = Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
     if ($resp.StatusCode -eq 200) {
