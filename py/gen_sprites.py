@@ -16,11 +16,11 @@ def color_map(body_hex,hair_hex,skin_hex):
             'd':shade(skin_hex,0.84),'D':shade(skin_hex,0.70),'L':shade(skin_hex,1.12),
             'm':hex2rgb('#c47b6a'),'g':hex2rgb('#222222'),
             'G':hex2rgb('#9aa0a8'),'i':hex2rgb('#f7f7f7'),
-            'H':shade(hair_hex,0.72),'k':shade(body_hex,0.66),'B':shade(body_hex,1.28),
+            'H':shade(hair_hex,0.62),'x':shade(hair_hex,0.42),'j':blend(hair,(255,255,255),0.17),'k':shade(body_hex,0.66),'B':shade(body_hex,1.30),'n':shade(body_hex,0.45),
             'p':hex2rgb('#5a5e63'),'P':hex2rgb('#c0c4c8'),
             'q':hex2rgb('#3a3d44'),'Q':hex2rgb('#56595f'),
             'r':hex2rgb('#a23b3b'),'R':hex2rgb('#c05a5a')}   # scarf maroon
-FORM=set('shHbBkdDLlz'); HAIR=set('hH')
+FORM=set('sdDLlz'); HAIR=set('hHjx')   # hair+body tones flat; volume comes from shade_hair / shade_body
 W=36; HEADH=26; cx=17.5
 
 def skin_shade(g):
@@ -29,7 +29,7 @@ def skin_shade(g):
     # deep contact shadow directly beneath hair / hat / beret
     for r in range(1,H):
         for c in range(W):
-            if g[r][c]=='s' and g[r-1][c] in 'hHqQ': g[r][c]='D'
+            if g[r][c]=='s' and g[r-1][c] in 'hHqQ': g[r][c]='d'   # soft contact (was deep 'D' -> hard line)
     # mid shadow beside the hair frame (cheeks)
     for r in range(H):
         for c in range(W):
@@ -107,6 +107,87 @@ def build_hair(g, opt):
             if g[r][13]=='h': g[r][13]='H'
     return P
 
+def fringe(g, style):
+    """Shape the FRONT hairline over the forehead per style, so each character's
+    bangs differ instead of all sharing one flat horizontal cut. Brings hair ('h')
+    down into the skin forehead (rows 11..b) by a per-style depth profile b(c).
+    Runs before eyes/glasses are stamped (those sit at row >=15, below the fringe)."""
+    def face_cols(r):
+        cs=[c for c in range(W) if g[r][c]=='s']
+        return (min(cs),max(cs)) if cs else None
+    ed=face_cols(12)
+    if not ed: return
+    L,R=ed; span=max(1,R-L); mid=(L+R)/2.0; half=max(1.0,span/2.0)
+    for c in range(L,R+1):
+        dx=c-mid
+        if   style=='sidepart': b=10+round((c-L)/span*4)            # swept across to one side
+        elif style=='long':     b=10+round(abs(dx)/half*3)          # center-part curtains
+        elif style=='spiky':    b=13 if (c-L)%3==1 else 10          # jagged downward points
+        elif style=='wild':     b=10+((c*5+c//2)%4)                 # uneven messy fringe
+        elif style=='wavy':     b=10+round(1.5+1.5*math.sin((c-L)*0.8))  # soft waves
+        else:                   b=10+round((1-(dx/half)**2))        # short: gentle rounded arc
+        b=max(10,min(13,b))
+        for r in range(11,b+1):
+            if 0<=r<HEADH and g[r][c]=='s': g[r][c]='h'
+
+def shade_hair(g, style='bob'):
+    """Volumetric hair shading: treat the head-hair mass as a sphere and ramp it
+    over 4 tones (j/h/H/x) by the surface normal (light from upper-left-front),
+    modulated by lock ridges that fan from the crown so it reads as 3D locks, not
+    a flat blob. Lock count / part offset / ridge depth vary per hairstyle so each
+    style flows the way its shape implies. Mutates g (list-of-lists).
+    Head dome = rows < HEADH; over-shoulder drape = rows >= HEADH."""
+    rows=len(g)
+    head=[(r,c) for r in range(min(HEADH,rows)) for c in range(W) if g[r][c]=='h']
+    if head:
+        rr=[r for r,_ in head]; cc=[c for _,c in head]
+        r0,r1,c0,c1=min(rr),max(rr),min(cc),max(cc)
+        cxh=(c0+c1)/2.0; cyh=(r0+r1)/2.0
+        rx=max(1.0,(c1-c0)/2.0+0.5); ry=max(1.0,(r1-r0)/2.0+0.5)
+        Lx,Ly,Lz=-0.42,-0.55,0.72
+        # per-style: (lock count, crown x-offset = part side, ridge weight)
+        SP={'spiky':(8.5,0.0,0.46),'wild':(7.5,0.0,0.44),'long':(5.5,0.0,0.34),
+            'wavy':(5.0,0.0,0.36),'sidepart':(6.0,-2.4,0.42),'short':(6.5,0.0,0.40)}
+        nlocks,cdx,rw=SP.get(style,(6.5,0.0,0.40))
+        crown_r=r0-0.6; crownc=cxh+cdx
+        for (r,c) in head:
+            nx=(c-cxh)/rx; ny=(r-cyh)/ry
+            v=1.0-nx*nx-ny*ny; nz=math.sqrt(v) if v>0 else 0.0
+            d=nx*Lx+ny*Ly+nz*Lz                  # round volume (light upper-left-front)
+            ang=math.atan2(r-crown_r, c-crownc)  # locks fan from crown (offset = part side)
+            ridge=math.cos(ang*nlocks)           # +1 lock crest, -1 valley/seam
+            s=(1.0-rw)*d+rw*ridge                # volume modulated by lock ridges
+            g[r][c]=('j' if s>=0.80 else 'h' if s>=0.12 else 'H' if s>=-0.45 else 'x')
+        # fringe tips that meet the face catch light — lift them out of deep shadow
+        # so the hairline doesn't read as a hard dark stripe across the forehead.
+        SKIN=set('sdDL')
+        for (r,c) in head:
+            if r+1<rows and g[r+1][c] in SKIN and g[r][c] in ('H','x'): g[r][c]='h'
+    drape=[(r,c) for r in range(min(HEADH,rows),rows) for c in range(W) if g[r][c]=='h']
+    if drape:                                    # over-shoulder locks: top-lit + vertical ridges
+        rr=[r for r,_ in drape]; cc=[c for _,c in drape]
+        r0=min(rr); r1=max(rr); cxd=(min(cc)+max(cc))/2.0
+        for (r,c) in drape:
+            tt=(r-r0)/max(1,(r1-r0))
+            ridge=math.cos(((c-cxd)/2.4)*math.pi)
+            s=(0.62-tt*1.1)+0.34*ridge
+            g[r][c]=('j' if s>=0.66 else 'h' if s>=-0.02 else 'H' if s>=-0.55 else 'x')
+
+def shade_body(g):
+    """Cel-shade the torso ('b' shirt cells) as a rounded volume lit from the
+    left-front into 4 tones B/b/k/n, so clothing reads 3D in the same language as
+    the hair. Outfit-detail cells (collar/tie/etc.) keep their own flat colors."""
+    cells=[(r,c) for r in range(len(g)) for c in range(W) if g[r][c]=='b']
+    if not cells: return
+    rr=[r for r,_ in cells]; cc=[c for _,c in cells]
+    r0,r1,c0,c1=min(rr),max(rr),min(cc),max(cc)
+    cxb=(c0+c1)/2.0; rxb=max(1.0,(c1-c0)/2.0+0.5)
+    for (r,c) in cells:
+        nx=(c-cxb)/rxb
+        nz=math.sqrt(max(0.0,1.0-nx*nx))
+        d=nx*(-0.6)+nz*0.78-((r-r0)/max(1,(r1-r0)))*0.16   # cylinder + slight bottom falloff
+        g[r][c]=('B' if d>=0.74 else 'b' if d>=0.30 else 'k' if d>=-0.10 else 'n')
+
 def make_head(opt):
     g=[['.']*W for _ in range(HEADH)]
     fcy,frx,fry = 15.5, 11.0, 10.8
@@ -114,6 +195,7 @@ def make_head(opt):
         for c in range(W):
             if r>=9 and ((c-cx)/frx)**2 + ((r-fcy)/fry)**2 <= 1.0: g[r][c]='s'
     P=build_hair(g, opt)
+    fringe(g, opt.get('hair','bob'))
     orx,ory,ocy = (14.6,13.8,12.2) if P.get('big') else (12.7,12.7,12.0)
     # eyes
     def stamp_eye(ecx,ecy,big):
@@ -307,7 +389,7 @@ def make_back(opt):
 def make_body_back(outfit, hairstyle):
     """Back of the torso: plain shirt + hood/scarf-from-behind + long-hair drape."""
     g=[['.']*W for _ in range(9)]
-    bounds={0:(14,21),1:(13,22),2:(12,23),3:(12,23),4:(12,23),5:(12,23),6:(12,23),7:(13,22),8:(13,22)}
+    bounds={0:(12,23),1:(11,24),2:(10,25),3:(10,25),4:(10,25),5:(10,25),6:(10,25),7:(11,23),8:(12,23)}
     for r,(a,b) in bounds.items():
         for c in range(a,b+1): g[r][c]='b'
     for r in (3,4,5): g[r][9]='s'; g[r][26]='s'
@@ -352,7 +434,7 @@ CFG=[
  ('Writer',  '#14b8a6','#0f3a35','#d9b38c',
    dict(beret=True,glasses='round',goatee=True,hair='wavy'),'scarf','wavy'),
 ]
-ALLOWED=set('.shHbBkdDLlzwcezmgGiPpqQrR')
+ALLOWED=set('.shHjxbBnkdDLlzwcezmgGiPpqQrR')
 def validate(grid,name):
     ok=True
     for i,row in enumerate(grid):
@@ -363,8 +445,10 @@ def validate(grid,name):
 
 def assemble(name, opt, outfit, hairstyle):
     """Return (bd, bu) as joined 36-wide strings (head+torso, 35 rows each)."""
-    bd=[''.join(r) for r in make_head(opt)+make_body(outfit,hairstyle)]
-    bu=[''.join(r) for r in make_back(opt)+make_body_back(outfit,hairstyle)]
+    fg=make_head(opt)+make_body(outfit,hairstyle); shade_hair(fg,hairstyle); shade_body(fg)
+    bg=make_back(opt)+make_body_back(outfit,hairstyle); shade_hair(bg,hairstyle); shade_body(bg)
+    bd=[''.join(r) for r in fg]
+    bu=[''.join(r) for r in bg]
     for tag,grid in (('BD',bd),('BU',bu)):
         if not validate(grid, f'{name}.{tag}'): raise SystemExit('grid errors')
         assert len(grid)==35, f'{name}.{tag} height {len(grid)} != 35'
@@ -420,8 +504,6 @@ def render_cells(grid,cmap,hi=1.18,lo=0.66,spec_t=0.55):
                 if (not filled(grid,r+1,c)) or (not filled(grid,r,c+1)): f*=0.80
                 elif (not filled(grid,r-1,c)) or (not filled(grid,r,c-1)): f*=1.10
                 col=mul(col,f)
-            if ch in HAIR and r<len(grid)*0.34 and (W*0.18)<c<(W*0.58) and not filled(grid,r-1,c):
-                col=blend(col,(255,255,255),spec_t)
             out[r][c]=col
     for r in range(len(grid)):
         for c in range(W):
@@ -434,8 +516,8 @@ SCALE=8; PAD=12; GAP=16; FLOOR=hex2rgb('#1e2a2e')
 def build():
     grids=[]
     for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
-        head=make_head(opt); body=make_body(outfit,hairstyle)
-        g=[''.join(r) for r in head+body] + LEGS_CUTE['stand']
+        fg=make_head(opt)+make_body(outfit,hairstyle); shade_hair(fg,hairstyle); shade_body(fg)
+        g=[''.join(r) for r in fg] + LEGS_CUTE['stand']
         if not validate(g,name): raise SystemExit('grid errors')
         grids.append((g,bd,hr,sk))
     rH=max(len(g) for g,_,_,_ in grids)
@@ -476,8 +558,8 @@ def write_png(path,canvas,CW,CH):
 def build_back():
     grids=[]
     for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
-        head=make_back(opt); body=make_body_back(outfit,hairstyle)
-        g=[''.join(r) for r in head+body] + LEGS_CUTE['stand']
+        bg=make_back(opt)+make_body_back(outfit,hairstyle); shade_hair(bg,hairstyle); shade_body(bg)
+        g=[''.join(r) for r in bg] + LEGS_CUTE['stand']
         if not validate(g,name): raise SystemExit('grid errors (back)')
         grids.append((g,bd,hr,sk))
     rH=max(len(g) for g,_,_,_ in grids)
