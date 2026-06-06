@@ -568,7 +568,7 @@ def render_cells(grid,cmap,hi=1.18,lo=0.66,spec_t=0.55):
                 out[r][c]=OUT
     return out
 
-SCALE=8; PAD=12; GAP=16; FLOOR=hex2rgb('#1e2a2e')
+SCALE=max(2, 6//SZ); PAD=12; GAP=16; FLOOR=hex2rgb('#1e2a2e')   # preview px/cell; auto-shrinks as SZ grows so the sheet stays viewable
 def build():
     grids=[]
     for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
