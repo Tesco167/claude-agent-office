@@ -212,7 +212,7 @@ def make_head(opt):
     return g
 
 def make_body(outfit, hairstyle):
-    g=[['.']*W for _ in range(13)]
+    g=[['.']*W for _ in range(9)]
     bounds={0:(12,23),1:(11,24),2:(10,25),3:(10,25),4:(10,25),5:(10,25),6:(10,25),7:(11,23),8:(12,23)}
     for r,(a,b) in bounds.items():
         for c in range(a,b+1): g[r][c]='b'
@@ -220,11 +220,6 @@ def make_body(outfit, hairstyle):
         g[r][9]='s'; g[r][26]='s'
     # subtle body shading
     g[4][12]='k'; g[4][13]='k'; g[4][22]='B'; g[5][12]='k'; g[5][22]='B'
-    # legs (shared)
-    g[9]=list('............llll...llll.............')
-    g[10]=list('............llll...llll.............')
-    g[11]=list('............zzzz...zzzz.............')
-    g[12]=list('............zzzzz.zzzzz.............')
     # ---- outfit details ----
     if outfit=='robe':           # Jamesmie: gold-trim collar + medallion
         for c in range(12,24): g[0][c]='c'
@@ -311,16 +306,12 @@ def make_back(opt):
 
 def make_body_back(outfit, hairstyle):
     """Back of the torso: plain shirt + hood/scarf-from-behind + long-hair drape."""
-    g=[['.']*W for _ in range(13)]
+    g=[['.']*W for _ in range(9)]
     bounds={0:(14,21),1:(13,22),2:(12,23),3:(12,23),4:(12,23),5:(12,23),6:(12,23),7:(13,22),8:(13,22)}
     for r,(a,b) in bounds.items():
         for c in range(a,b+1): g[r][c]='b'
     for r in (3,4,5): g[r][9]='s'; g[r][26]='s'
     g[4][12]='k'; g[5][12]='k'; g[4][22]='B'; g[5][22]='B'
-    g[9]=list('............llll...llll.............')
-    g[10]=list('............llll...llll.............')
-    g[11]=list('............zzzz...zzzz.............')
-    g[12]=list('............zzzzz.zzzzz.............')
     if outfit=='hoodie':
         for c in range(11,25): g[0][c]='k'
         for c in range(12,24): g[1][c]='k'
@@ -337,6 +328,15 @@ def make_body_back(outfit, hairstyle):
             for c in (6,7,28,29):
                 if g[r][c]=='.': g[r][c]='h'
     return g
+
+LEGS_CUTE = {
+ 'stand':['............llll...llll.............','............llll...llll.............',
+          '............zzzz...zzzz.............','............zzzzz.zzzzz.............'],
+ 'walk1':['.............lllll..ll..............','.............lllll..ll..............',
+          '.............zzzzz..zz..............','..............zzzz.zzz..............'],
+ 'walk2':['.............ll..lllll..............','.............ll..lllll..............',
+          '.............zz..zzzzz..............','..............zzz.zzzz..............'],
+}
 
 CFG=[
  ('Jamesmie','#fbbf24','#1a0a00','#f5d5a0',
@@ -360,6 +360,27 @@ def validate(grid,name):
         bad=set(row)-ALLOWED
         if bad: print(f'CHAR {name} r{i}: {sorted(bad)}'); ok=False
     return ok
+
+def assemble(name, opt, outfit, hairstyle):
+    """Return (bd, bu) as joined 36-wide strings (head+torso, 35 rows each)."""
+    bd=[''.join(r) for r in make_head(opt)+make_body(outfit,hairstyle)]
+    bu=[''.join(r) for r in make_back(opt)+make_body_back(outfit,hairstyle)]
+    for tag,grid in (('BD',bd),('BU',bu)):
+        if not validate(grid, f'{name}.{tag}'): raise SystemExit('grid errors')
+        assert len(grid)==35, f'{name}.{tag} height {len(grid)} != 35'
+    return bd,bu
+
+def all_frames_uniform():
+    """Assert every assembled full frame (head+torso+each leg variant) is 39x36."""
+    for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
+        b_d,b_u=assemble(name,opt,outfit,hairstyle)
+        for top in (b_d,b_u):
+            for lk in ('stand','walk1','walk2'):
+                full=top+LEGS_CUTE[lk]
+                assert len(full)==39, f'{name} {lk} height {len(full)}'
+                for i,row in enumerate(full):
+                    assert len(row)==36, f'{name} {lk} r{i} width {len(row)}'
+    print('all frames uniform: 39x36')
 
 def filled(grid,r,c): return 0<=r<len(grid) and 0<=c<W and grid[r][c]!='.'
 def render_cells(grid,cmap,hi=1.18,lo=0.66,spec_t=0.55):
@@ -389,7 +410,7 @@ def build():
     grids=[]
     for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
         head=make_head(opt); body=make_body(outfit,hairstyle)
-        g=[''.join(r) for r in head+body]
+        g=[''.join(r) for r in head+body] + LEGS_CUTE['stand']
         if not validate(g,name): raise SystemExit('grid errors')
         grids.append((g,bd,hr,sk))
     rH=max(len(g) for g,_,_,_ in grids)
@@ -431,7 +452,7 @@ def build_back():
     grids=[]
     for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
         head=make_back(opt); body=make_body_back(outfit,hairstyle)
-        g=[''.join(r) for r in head+body]
+        g=[''.join(r) for r in head+body] + LEGS_CUTE['stand']
         if not validate(g,name): raise SystemExit('grid errors (back)')
         grids.append((g,bd,hr,sk))
     rH=max(len(g) for g,_,_,_ in grids)
@@ -458,6 +479,7 @@ def build_back():
                         canvas[(oy+r*SCALE+sy)*CW+(ox+c*SCALE+sx)]=col
     return canvas,CW,CH
 
+all_frames_uniform()
 canvas,CW,CH=build(); write_png('__cute_preview.png',canvas,CW,CH)
 print('wrote __cute_preview.png',CW,'x',CH,'-> Jamesmie Manager Reader Coder Searcher Writer')
 cb,cbw,cbh=build_back(); write_png('__back_preview.png',cb,cbw,cbh)
