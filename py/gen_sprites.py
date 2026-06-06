@@ -16,7 +16,7 @@ def color_map(body_hex,hair_hex,skin_hex):
             'd':shade(skin_hex,0.84),'D':shade(skin_hex,0.70),'L':shade(skin_hex,1.12),
             'm':hex2rgb('#c47b6a'),'g':hex2rgb('#222222'),
             'G':hex2rgb('#9aa0a8'),'i':hex2rgb('#f7f7f7'),
-            'H':shade(hair_hex,0.62),'x':shade(hair_hex,0.42),'j':blend(hair,(255,255,255),0.17),'k':shade(body_hex,0.66),'B':shade(body_hex,1.30),'n':shade(body_hex,0.45),
+            'H':shade(hair_hex,0.62),'x':shade(hair_hex,0.42),'j':blend(hair,(255,255,255),0.25),'k':shade(body_hex,0.66),'B':shade(body_hex,1.30),'n':shade(body_hex,0.45),
             'p':hex2rgb('#5a5e63'),'P':hex2rgb('#c0c4c8'),
             'q':hex2rgb('#3a3d44'),'Q':hex2rgb('#56595f'),
             'r':hex2rgb('#a23b3b'),'R':hex2rgb('#c05a5a')}   # scarf maroon
@@ -28,13 +28,15 @@ def skin_shade(g):
     # 4-tone skin ramp: L highlight, s base, d mid shadow, D deep shadow
     H=HEADH
     # deep contact shadow directly beneath hair / hat / beret
+    # only applies above the fringe zone (row <= 10*SZ) to avoid comb-stripe on jagged fringes
     for r in range(1,H):
         for c in range(W):
-            if g[r][c]=='s' and g[r-1][c] in 'hHqQ': g[r][c]='d'   # soft contact (was deep 'D' -> hard line)
-    # mid shadow beside the hair frame (cheeks)
+            if g[r][c]=='s' and g[r-1][c] in 'hHqQ' and r<=10*SZ:
+                g[r][c]='d'
+    # mid shadow beside the hair frame (cheeks) — only outside forehead fringe zone
     for r in range(H):
         for c in range(W):
-            if g[r][c]=='s' and ((c>0 and g[r][c-1] in 'hH') or (c<W-1 and g[r][c+1] in 'hH')):
+            if g[r][c]=='s' and r>=14*SZ and ((c>0 and g[r][c-1] in 'hH') or (c<W-1 and g[r][c+1] in 'hH')):
                 g[r][c]='d'
     # jaw / chin: lowest two skin cells per column
     for c in range(W):
@@ -121,15 +123,16 @@ def fringe(g, style):
     L,R=ed; span=max(1,R-L); mid=(L+R)/2.0; half=max(1.0,span/2.0)
     for c in range(L,R+1):
         dx=c-mid
-        if   style=='sidepart': b=10*SZ+round((c-L)/span*4*SZ)            # swept across to one side
+        if   style=='sidepart': b=11*SZ+round((c-L)/span*1*SZ)            # very shallow sweep, 1px max — avoid diagonal band
         elif style=='long':     b=10*SZ+round(abs(dx)/half*3*SZ)          # center-part curtains
-        elif style=='spiky':    b=13*SZ if (c-L)%(3*SZ)==1 else 10*SZ     # jagged downward points
-        elif style=='wild':     b=10*SZ+((c*5+c//2)%4)*SZ                 # uneven messy fringe
+        elif style=='spiky':    b=10*SZ  # spiky cap already has spikes from build_hair — no extra fringe needed
+        elif style=='wild':     b=11*SZ+(((c//SZ)*3+c//SZ)%2)*SZ          # shallow uneven: 1-2*SZ depth only
         elif style=='wavy':     b=10*SZ+round((1.5+1.5*math.sin((c-L)*0.8/SZ))*SZ)  # soft waves
         else:                   b=10*SZ+round((1-(dx/half)**2)*SZ)        # short: gentle rounded arc
         b=max(10*SZ,min(13*SZ,b))
+        # fill solid band down to b so no comb-gaps form; skip if b==10*SZ (no fringe)
         for r in range(11*SZ,b+1):
-            if 0<=r<HEADH and g[r][c]=='s': g[r][c]='h'
+            if 0<=r<HEADH and g[r][c] in ('s','.'): g[r][c]='h'
 
 def shade_hair(g, style='bob'):
     """Volumetric hair shading: treat the head-hair mass as a sphere and ramp it
@@ -146,10 +149,11 @@ def shade_hair(g, style='bob'):
         cxh=(c0+c1)/2.0; cyh=(r0+r1)/2.0
         rx=max(1.0,(c1-c0)/2.0+0.5); ry=max(1.0,(r1-r0)/2.0+0.5)
         Lx,Ly,Lz=-0.42,-0.55,0.72
-        # per-style: (lock count, crown x-offset = part side, ridge weight)
-        SP={'spiky':(8.5,0.0,0.46),'wild':(7.5,0.0,0.44),'long':(5.5,0.0,0.34),
-            'wavy':(5.0,0.0,0.36),'sidepart':(6.0,-2.4,0.42),'short':(6.5,0.0,0.40)}
-        nlocks,cdx,rw=SP.get(style,(6.5,0.0,0.40))
+        # per-style: (lock count per radian, crown x-offset = part side, ridge weight)
+        # nlocks scales with SZ so on-screen lock width stays constant regardless of resolution
+        SP={'spiky':(8.5*SZ,0.0,0.46),'wild':(7.5*SZ,0.0,0.44),'long':(5.5*SZ,0.0,0.34),
+            'wavy':(5.0*SZ,0.0,0.36),'sidepart':(6.0*SZ,-2.4,0.42),'short':(6.5*SZ,0.0,0.40)}
+        nlocks,cdx,rw=SP.get(style,(6.5*SZ,0.0,0.40))
         crown_r=r0-0.6; crownc=cxh+cdx*SZ
         for (r,c) in head:
             nx=(c-cxh)/rx; ny=(r-cyh)/ry
@@ -158,12 +162,21 @@ def shade_hair(g, style='bob'):
             ang=math.atan2(r-crown_r, c-crownc)  # locks fan from crown (offset = part side)
             ridge=math.cos(ang*nlocks)           # +1 lock crest, -1 valley/seam
             s=(1.0-rw)*d+rw*ridge                # volume modulated by lock ridges
-            g[r][c]=('j' if s>=0.80 else 'h' if s>=0.12 else 'H' if s>=-0.45 else 'x')
+            g[r][c]=('j' if s>=0.72 else 'h' if s>=0.08 else 'H' if s>=-0.40 else 'x')
         # fringe tips that meet the face catch light — lift them out of deep shadow
         # so the hairline doesn't read as a hard dark stripe across the forehead.
         SKIN=set('sdDL')
+        # pass 1: lift any hair cell that has skin within 3 rows below it
         for (r,c) in head:
-            if r+1<rows and g[r+1][c] in SKIN and g[r][c] in ('H','x'): g[r][c]='h'
+            for delta in (1,2,3):
+                if r+delta<rows and g[r+delta][c] in SKIN and g[r][c] in ('H','x'):
+                    g[r][c]='h'; break
+        # pass 2: unconditionally brighten all hair in the fringe zone (rows 10-14*SZ)
+        # — these cells are at the bottom of the hair volume and tend to go dark;
+        # lifting them prevents the hard dark band / comb-stripe at the hairline.
+        for (r,c) in head:
+            if 10*SZ<=r<=14*SZ and g[r][c]=='x': g[r][c]='H'
+            if 10*SZ<=r<=14*SZ and g[r][c]=='H': g[r][c]='h'
     drape=[(r,c) for r in range(min(HEADH,rows),rows) for c in range(W) if g[r][c]=='h']
     if drape:                                    # over-shoulder locks: top-lit + vertical ridges
         rr=[r for r,_ in drape]; cc=[c for _,c in drape]
@@ -322,6 +335,13 @@ def make_body(outfit, hairstyle):
             g[1*SZ+sr][12*SZ]='c'; g[1*SZ+sr][23*SZ]='c'
         for sr in range(SZ):
             g[3*SZ+sr][17*SZ]='c'; g[3*SZ+sr][18*SZ]='c'; g[4*SZ+sr][17*SZ]='c'   # medallion
+        # vertical fold shadows on robe front
+        for r in range(2*SZ,8*SZ):
+            if g[r][13*SZ]=='b': g[r][13*SZ]='k'
+            if g[r][22*SZ]=='b': g[r][22*SZ]='n'
+        # horizontal drape fold midway down
+        for c in range(12*SZ,24*SZ):
+            if g[5*SZ][c]=='b': g[5*SZ][c]='k'
     elif outfit=='tie':          # Manager: white collar + tie
         for c in range(12*SZ,24*SZ):
             for sr in range(SZ): g[0*SZ+sr][c]='w'
@@ -331,6 +351,13 @@ def make_body(outfit, hairstyle):
             g[r][17*SZ]='g'; g[r][18*SZ]='g'
         for sr in range(SZ):
             g[1*SZ+sr][17*SZ]='w'; g[1*SZ+sr][18*SZ]='w'
+        # jacket lapel fold lines
+        for r in range(2*SZ,7*SZ):
+            if g[r][13*SZ]=='b': g[r][13*SZ]='k'
+            if g[r][22*SZ]=='b': g[r][22*SZ]='n'
+        # horizontal chest seam
+        for c in range(12*SZ,24*SZ):
+            if g[4*SZ][c]=='b': g[4*SZ][c]='k'
     elif outfit=='cardigan':     # Reader: collar + button placket
         for c in range(13*SZ,23*SZ):
             for sr in range(SZ): g[0*SZ+sr][c]='w'
@@ -338,6 +365,13 @@ def make_body(outfit, hairstyle):
             g[r][17*SZ]='k'; g[r][18*SZ]='k'
         for orig_r in (2,4,6):
             for sr in range(SZ): g[orig_r*SZ+sr][17*SZ]='w'   # buttons
+        # side fold shadows
+        for r in range(1*SZ,8*SZ):
+            if g[r][13*SZ]=='b': g[r][13*SZ]='k'
+            if g[r][22*SZ]=='b': g[r][22*SZ]='n'
+        # horizontal fold midway
+        for c in range(12*SZ,24*SZ):
+            if g[4*SZ][c]=='b': g[4*SZ][c]='k'
     elif outfit=='hoodie':       # Coder: hood + drawstrings
         for c in range(11*SZ,25*SZ):
             for sr in range(SZ): g[0*SZ+sr][c]='k'
@@ -349,6 +383,13 @@ def make_body(outfit, hairstyle):
             g[r][16*SZ]='w'; g[r][19*SZ]='w'   # drawstrings
         for sr in range(SZ):
             g[2*SZ+sr][17*SZ]='k'; g[2*SZ+sr][18*SZ]='k'
+        # kangaroo pocket seam line
+        for c in range(14*SZ,22*SZ):
+            if g[5*SZ][c]=='b': g[5*SZ][c]='k'
+        # pocket fold shadow — left side of pouch
+        for r in range(5*SZ,8*SZ):
+            if g[r][14*SZ]=='b': g[r][14*SZ]='k'
+            if g[r][21*SZ]=='b': g[r][21*SZ]='n'
     elif outfit=='jacket':       # Searcher: open jacket + white tee
         for c in range(15*SZ,21*SZ):
             for r in range(0,7*SZ):
@@ -357,6 +398,14 @@ def make_body(outfit, hairstyle):
             g[r][14*SZ]='k'; g[r][21*SZ]='k'   # lapels
         for sr in range(SZ):
             g[0*SZ+sr][14*SZ]='k'; g[0*SZ+sr][21*SZ]='k'
+        # jacket chest seam
+        for c in range(10*SZ,15*SZ):
+            if g[3*SZ][c]=='b': g[3*SZ][c]='k'
+        for c in range(21*SZ,26*SZ):
+            if g[3*SZ][c]=='b': g[3*SZ][c]='n'
+        # side fold on jacket panels
+        for r in range(1*SZ,7*SZ):
+            if g[r][12*SZ]=='b': g[r][12*SZ]='n'
     elif outfit=='scarf':        # Writer: turtleneck + maroon scarf
         for c in range(12*SZ,24*SZ):
             for sr in range(SZ): g[0*SZ+sr][c]='r'
@@ -366,6 +415,13 @@ def make_body(outfit, hairstyle):
             g[2*SZ+sr][12*SZ]='R'; g[2*SZ+sr][13*SZ]='r'; g[2*SZ+sr][14*SZ]='r'        # hanging end
         for c in range(15*SZ,21*SZ):
             for sr in range(SZ): g[2*SZ+sr][c]='r'
+        # turtleneck body fold lines
+        for r in range(2*SZ,8*SZ):
+            if g[r][13*SZ]=='b': g[r][13*SZ]='k'
+            if g[r][22*SZ]=='b': g[r][22*SZ]='n'
+        # horizontal chest fold
+        for c in range(12*SZ,24*SZ):
+            if g[4*SZ][c]=='b': g[4*SZ][c]='k'
     # ---- long / wavy hair draping over shoulders ----
     if hairstyle=='long':
         for r in range(0,9*SZ):
@@ -440,11 +496,28 @@ def make_body_back(outfit, hairstyle):
             for sr in range(SZ): g[0*SZ+sr][c]='k'
         for c in range(12*SZ,24*SZ):
             for sr in range(SZ): g[1*SZ+sr][c]='k'
+        # back seam down center
+        for r in range(2*SZ,8*SZ):
+            if g[r][17*SZ]=='b': g[r][17*SZ]='k'
+        # horizontal back yoke seam
+        for c in range(12*SZ,24*SZ):
+            if g[3*SZ][c]=='b': g[3*SZ][c]='k'
     elif outfit=='scarf':
         for c in range(12*SZ,24*SZ):
             for sr in range(SZ): g[0*SZ+sr][c]='r'
         for c in range(11*SZ,25*SZ):
             for sr in range(SZ): g[1*SZ+sr][c]='r'
+        # back body folds
+        for r in range(2*SZ,8*SZ):
+            if g[r][13*SZ]=='b': g[r][13*SZ]='k'
+            if g[r][22*SZ]=='b': g[r][22*SZ]='n'
+    # generic back yoke seam for other outfits
+    if outfit not in ('hoodie','scarf'):
+        for c in range(12*SZ,24*SZ):
+            if g[3*SZ][c]=='b': g[3*SZ][c]='k'
+        for r in range(1*SZ,8*SZ):
+            if g[r][13*SZ]=='b': g[r][13*SZ]='k'
+            if g[r][22*SZ]=='b': g[r][22*SZ]='n'
     if hairstyle=='long':
         for r in range(0,9*SZ):
             cols=list(range(5*SZ,9*SZ))+list(range(27*SZ,31*SZ)) if r<6*SZ else list(range(5*SZ,8*SZ))+list(range(28*SZ,31*SZ))
