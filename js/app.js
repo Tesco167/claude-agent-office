@@ -1031,7 +1031,7 @@ const depthProcess = (grid, bodyColor, hairColor, skinColor) => {
       if (ch === '.') continue;
       let col = cmap[ch] || '#ff00ff';
       if (FORM_KEYS.has(ch)) {
-        const t = ((c / (cols - 1)) + (r / (rows - 1))) / 2;
+        const t = ((cols > 1 ? c / (cols - 1) : 0.5) + (rows > 1 ? r / (rows - 1) : 0.5)) / 2;
         let f = SHADE_HI + (SHADE_LO - SHADE_HI) * t;
         if (!filled(r + 1, c) || !filled(r, c + 1)) f *= 0.80;
         else if (!filled(r - 1, c) || !filled(r, c - 1)) f *= 1.10;
