@@ -61,21 +61,16 @@ HSTYLE={
  'wild':     dict(fw=3, fb=22, cap_row=11, bumpy=True, big=True),
  'wavy':     dict(fw=2, fb=22, cap_row=10, bumpy=True, drape='wavy'),
 }
-def make_head(opt):
-    g=[['.']*W for _ in range(HEADH)]
-    fcy,frx,fry = 15.5, 11.0, 10.8
-    for r in range(HEADH):
-        for c in range(W):
-            if r>=9 and ((c-cx)/frx)**2 + ((r-fcy)/fry)**2 <= 1.0: g[r][c]='s'
+def build_hair(g, opt):
+    """Fill hair ('h') around the already-stamped face skin per the hairstyle.
+    Mutates g (a HEADH x W list-of-lists). Returns the style param dict P."""
     style=opt.get('hair','bob')
     P=HSTYLE.get(style, dict(fw=2, fb=18, cap_row=10))
     orx,ory,ocy = (14.6,13.8,12.2) if P.get('big') else (12.7,12.7,12.0)
-    # 1) top dome cap
     for r in range(HEADH):
         for c in range(W):
             if g[r][c]=='.' and r<=P['cap_row'] and ((c-cx)/orx)**2+((r-ocy)/ory)**2<=1.0:
                 g[r][c]='h'
-    # 2) side framing down to fb (this is what makes short vs long read)
     def face_edges(r):
         cols=[c for c in range(W) if g[r][c]=='s']
         return (min(cols),max(cols)) if cols else None
@@ -90,30 +85,36 @@ def make_head(opt):
         for r in range(HEADH):
             if g[r][c]=='h': return r
         return None
-    # 3) spikes (clear triangular tufts on top)
     if P.get('spikes'):
         for c,up in [(8,2),(11,3),(14,2),(17,3),(20,2),(23,3),(26,2)]:
             t=hair_top(c)
             if t is not None:
                 for k in range(1,up+1):
                     if t-k>=0: g[t-k][c]='h'
-    # 4) bumpy outer edge (afro / wavy volume)
     if P.get('bumpy'):
         for c in range(5,31,2):
             t=hair_top(c)
             if t is not None and t-1>=0: g[t-1][c]='h'
-        for r in range(8,P['fb'],2):       # widen sides
+        for r in range(8,P['fb'],2):
             ed=face_edges(r)
             if not ed: continue
             L,R=ed
             ll=L-P['fw']-1; rr=R+P['fw']+1
             if 0<=ll<W and g[r][ll]=='.': g[r][ll]='h'
             if 0<=rr<W and g[r][rr]=='.': g[r][rr]='h'
-    # 5) side part (a parted fringe sweeping to one side)
     if P.get('part'):
         for r in range(0,10):
-            cc=13
-            if g[r][cc]=='h': g[r][cc]='H'   # part line (hair shadow)
+            if g[r][13]=='h': g[r][13]='H'
+    return P
+
+def make_head(opt):
+    g=[['.']*W for _ in range(HEADH)]
+    fcy,frx,fry = 15.5, 11.0, 10.8
+    for r in range(HEADH):
+        for c in range(W):
+            if r>=9 and ((c-cx)/frx)**2 + ((r-fcy)/fry)**2 <= 1.0: g[r][c]='s'
+    P=build_hair(g, opt)
+    orx,ory,ocy = (14.6,13.8,12.2) if P.get('big') else (12.7,12.7,12.0)
     # eyes
     def stamp_eye(ecx,ecy,big):
         ry=2.9 if big else 2.6; rx=3.0 if big else 2.7
@@ -268,6 +269,75 @@ def make_body(outfit, hairstyle):
                 if g[r][c]=='.': g[r][c]='h'
     return g
 
+def make_back(opt):
+    """Up/back view: full hair silhouette, no face. Keep crown/beret/headphones."""
+    g=[['.']*W for _ in range(HEADH)]
+    fcy,frx,fry = 15.5, 11.0, 10.8
+    for r in range(HEADH):
+        for c in range(W):
+            if r>=9 and ((c-cx)/frx)**2+((r-fcy)/fry)**2<=1.0: g[r][c]='s'
+    build_hair(g, opt)
+    for r in range(HEADH):                 # back of head: skin area becomes hair
+        for c in range(W):
+            if g[r][c]=='s': g[r][c]='h'
+    if opt.get('headphones'):
+        orx,ory,ocy = 12.7,12.7,12.0
+        for c in range(5,31):
+            x=(c-cx)/orx
+            if abs(x)<=1.0:
+                br=int(round(ocy-ory*math.sqrt(max(0.0,1-x*x))))+1
+                for bb,col in ((br,'P'),(br+1,'p')):
+                    if 0<=bb<HEADH and g[bb][c] in 'h.': g[bb][c]=col
+        for ux in (4,31):
+            for dy in range(-3,4):
+                for dx in range(-2,3):
+                    if (dx/2.2)**2+(dy/3.2)**2<=1.0 and 0<=15+dy<HEADH: g[15+dy][ux]='p'
+            for dy in range(-2,3):
+                if 0<=15+dy<HEADH: g[15+dy][ux]='G'
+    if opt.get('beret'):
+        for r in range(0,8):
+            for c in range(W):
+                if g[r][c]=='h': g[r][c]='q'
+        for c in range(W):
+            if g[3][c]=='q' and c<cx: g[3][c]='Q'
+        for r in range(1,HEADH-1):
+            for c in range(W):
+                if g[r][c]=='q' and g[r+1][c]=='h': g[r+1][c]='g'
+        g[0]=list('................bb..................')
+    if opt.get('crown'):
+        g[0]=list('...........c..c..c..c..c............')
+        g[1]=list('...........ccccccccccccc............')
+    return g
+
+def make_body_back(outfit, hairstyle):
+    """Back of the torso: plain shirt + hood/scarf-from-behind + long-hair drape."""
+    g=[['.']*W for _ in range(13)]
+    bounds={0:(14,21),1:(13,22),2:(12,23),3:(12,23),4:(12,23),5:(12,23),6:(12,23),7:(13,22),8:(13,22)}
+    for r,(a,b) in bounds.items():
+        for c in range(a,b+1): g[r][c]='b'
+    for r in (3,4,5): g[r][9]='s'; g[r][26]='s'
+    g[4][12]='k'; g[5][12]='k'; g[4][22]='B'; g[5][22]='B'
+    g[9]=list('............llll...llll.............')
+    g[10]=list('............llll...llll.............')
+    g[11]=list('............zzzz...zzzz.............')
+    g[12]=list('............zzzzz.zzzzz.............')
+    if outfit=='hoodie':
+        for c in range(11,25): g[0][c]='k'
+        for c in range(12,24): g[1][c]='k'
+    elif outfit=='scarf':
+        for c in range(12,24): g[0][c]='r'
+        for c in range(11,25): g[1][c]='r'
+    if hairstyle=='long':
+        for r in range(0,9):
+            cols=(5,6,7,8,27,28,29,30) if r<6 else (5,6,7,28,29,30)
+            for c in cols:
+                if g[r][c]=='.': g[r][c]='h'
+    elif hairstyle=='wavy':
+        for r in range(0,5):
+            for c in (6,7,28,29):
+                if g[r][c]=='.': g[r][c]='h'
+    return g
+
 CFG=[
  ('Jamesmie','#fbbf24','#1a0a00','#f5d5a0',
    dict(crown=True,eyes='big',mouth='smile',hair='short'),'robe','short'),
@@ -357,5 +427,38 @@ def write_png(path,canvas,CW,CH):
     with open(path,'wb') as f:
         f.write(b'\x89PNG\r\n\x1a\n'); f.write(chunk(b'IHDR',struct.pack('>IIBBBBB',CW,CH,8,2,0,0,0)))
         f.write(chunk(b'IDAT',zlib.compress(bytes(raw),9))); f.write(chunk(b'IEND',b''))
+def build_back():
+    grids=[]
+    for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
+        head=make_back(opt); body=make_body_back(outfit,hairstyle)
+        g=[''.join(r) for r in head+body]
+        if not validate(g,name): raise SystemExit('grid errors (back)')
+        grids.append((g,bd,hr,sk))
+    rH=max(len(g) for g,_,_,_ in grids)
+    cellW=W*SCALE+PAD*2; cellH=rH*SCALE+PAD*2
+    CW=len(grids)*cellW+(len(grids)+1)*GAP; CH=cellH+GAP*2
+    canvas=[FLOOR]*(CW*CH)
+    for ci,(g,bd,hr,sk) in enumerate(grids):
+        cmap=color_map(bd,hr,sk); cells=render_cells(g,cmap)
+        ox=GAP+ci*(cellW+GAP)+PAD; oy=GAP+PAD
+        cxp=ox+(W*SCALE)//2; cyp=oy+len(g)*SCALE-SCALE
+        rx=int(W*SCALE*0.30); ry=max(4,int(SCALE*1.3))
+        for yy in range(cyp-ry,cyp+ry+1):
+            for xx in range(cxp-rx,cxp+rx+1):
+                if 0<=xx<CW and 0<=yy<CH:
+                    dx=(xx-cxp)/rx; dy=(yy-cyp)/ry; dd=dx*dx+dy*dy
+                    if dd<=1.0:
+                        idx=yy*CW+xx; canvas[idx]=blend(canvas[idx],(0,0,0),0.55*(1-dd*dd))
+        for r in range(len(g)):
+            for c in range(W):
+                col=cells[r][c]
+                if col is None: continue
+                for sy in range(SCALE):
+                    for sx in range(SCALE):
+                        canvas[(oy+r*SCALE+sy)*CW+(ox+c*SCALE+sx)]=col
+    return canvas,CW,CH
+
 canvas,CW,CH=build(); write_png('__cute_preview.png',canvas,CW,CH)
 print('wrote __cute_preview.png',CW,'x',CH,'-> Jamesmie Manager Reader Coder Searcher Writer')
+cb,cbw,cbh=build_back(); write_png('__back_preview.png',cb,cbw,cbh)
+print('wrote __back_preview.png')
