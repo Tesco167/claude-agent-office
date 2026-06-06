@@ -21,7 +21,8 @@ def color_map(body_hex,hair_hex,skin_hex):
             'q':hex2rgb('#3a3d44'),'Q':hex2rgb('#56595f'),
             'r':hex2rgb('#a23b3b'),'R':hex2rgb('#c05a5a')}   # scarf maroon
 FORM=set('sdDLlz'); HAIR=set('hHjx')   # hair+body tones flat; volume comes from shade_hair / shade_body
-W=36; HEADH=26; cx=17.5
+SZ = 2                      # resolution multiplier vs the original 36-wide art
+W=36*SZ; HEADH=26*SZ; cx=(W-1)/2
 
 def skin_shade(g):
     # 4-tone skin ramp: L highlight, s base, d mid shadow, D deep shadow
@@ -43,30 +44,30 @@ def skin_shade(g):
             for r in (b,b-1):
                 if 0<=r<H and g[r][c]=='s': g[r][c]='d'
     # forehead + left-cheek highlight (light from top-left)
-    for r in range(9,15):
-        for c in range(12,21):
-            if g[r][c]=='s' and (c-cx)<3 and g[r-1][c] not in 'hH':
+    for r in range(9*SZ,15*SZ):
+        for c in range(12*SZ,21*SZ):
+            if g[r][c]=='s' and (c-cx)<3*SZ and g[r-1][c] not in 'hH':
                 g[r][c]='L'
     # nose-bridge highlight
-    for (nc,nr) in [(17,17),(17,18),(18,18)]:
+    for (nc,nr) in [(17*SZ,17*SZ),(17*SZ,18*SZ),(18*SZ,18*SZ)]:
         if 0<=nr<H and g[nr][nc]=='s': g[nr][nc]='L'
     return g
 
 import math
 HSTYLE={
- 'short':    dict(fw=1, fb=11, cap_row=10),
- 'sidepart': dict(fw=1, fb=13, cap_row=10, part=True),
- 'long':     dict(fw=3, fb=25, cap_row=10, drape='long'),
- 'spiky':    dict(fw=2, fb=16, cap_row=10, spikes=True),
- 'wild':     dict(fw=3, fb=22, cap_row=11, bumpy=True, big=True),
- 'wavy':     dict(fw=2, fb=22, cap_row=10, bumpy=True, drape='wavy'),
+ 'short':    dict(fw=1*SZ, fb=11*SZ, cap_row=10*SZ),
+ 'sidepart': dict(fw=1*SZ, fb=13*SZ, cap_row=10*SZ, part=True),
+ 'long':     dict(fw=3*SZ, fb=25*SZ, cap_row=10*SZ, drape='long'),
+ 'spiky':    dict(fw=2*SZ, fb=16*SZ, cap_row=10*SZ, spikes=True),
+ 'wild':     dict(fw=3*SZ, fb=22*SZ, cap_row=11*SZ, bumpy=True, big=True),
+ 'wavy':     dict(fw=2*SZ, fb=22*SZ, cap_row=10*SZ, bumpy=True, drape='wavy'),
 }
 def build_hair(g, opt):
     """Fill hair ('h') around the already-stamped face skin per the hairstyle.
     Mutates g (a HEADH x W list-of-lists). Returns the style param dict P."""
     style=opt.get('hair','bob')
-    P=HSTYLE.get(style, dict(fw=2, fb=18, cap_row=10))
-    orx,ory,ocy = (14.6,13.8,12.2) if P.get('big') else (12.7,12.7,12.0)
+    P=HSTYLE.get(style, dict(fw=2*SZ, fb=18*SZ, cap_row=10*SZ))
+    orx,ory,ocy = (14.6*SZ,13.8*SZ,12.2*SZ) if P.get('big') else (12.7*SZ,12.7*SZ,12.0*SZ)
     for r in range(HEADH):
         for c in range(W):
             if g[r][c]=='.' and r<=P['cap_row'] and ((c-cx)/orx)**2+((r-ocy)/ory)**2<=1.0:
@@ -86,16 +87,16 @@ def build_hair(g, opt):
             if g[r][c]=='h': return r
         return None
     if P.get('spikes'):
-        for c,up in [(8,2),(11,3),(14,2),(17,3),(20,2),(23,3),(26,2)]:
+        for c,up in [(8*SZ,2*SZ),(11*SZ,3*SZ),(14*SZ,2*SZ),(17*SZ,3*SZ),(20*SZ,2*SZ),(23*SZ,3*SZ),(26*SZ,2*SZ)]:
             t=hair_top(c)
             if t is not None:
                 for k in range(1,up+1):
                     if t-k>=0: g[t-k][c]='h'
     if P.get('bumpy'):
-        for c in range(5,31,2):
+        for c in range(5*SZ,31*SZ,2):
             t=hair_top(c)
             if t is not None and t-1>=0: g[t-1][c]='h'
-        for r in range(8,P['fb'],2):
+        for r in range(8*SZ,P['fb'],2):
             ed=face_edges(r)
             if not ed: continue
             L,R=ed
@@ -103,8 +104,8 @@ def build_hair(g, opt):
             if 0<=ll<W and g[r][ll]=='.': g[r][ll]='h'
             if 0<=rr<W and g[r][rr]=='.': g[r][rr]='h'
     if P.get('part'):
-        for r in range(0,10):
-            if g[r][13]=='h': g[r][13]='H'
+        for r in range(0,10*SZ):
+            if g[r][13*SZ]=='h': g[r][13*SZ]='H'
     return P
 
 def fringe(g, style):
@@ -115,19 +116,19 @@ def fringe(g, style):
     def face_cols(r):
         cs=[c for c in range(W) if g[r][c]=='s']
         return (min(cs),max(cs)) if cs else None
-    ed=face_cols(12)
+    ed=face_cols(12*SZ)
     if not ed: return
     L,R=ed; span=max(1,R-L); mid=(L+R)/2.0; half=max(1.0,span/2.0)
     for c in range(L,R+1):
         dx=c-mid
-        if   style=='sidepart': b=10+round((c-L)/span*4)            # swept across to one side
-        elif style=='long':     b=10+round(abs(dx)/half*3)          # center-part curtains
-        elif style=='spiky':    b=13 if (c-L)%3==1 else 10          # jagged downward points
-        elif style=='wild':     b=10+((c*5+c//2)%4)                 # uneven messy fringe
-        elif style=='wavy':     b=10+round(1.5+1.5*math.sin((c-L)*0.8))  # soft waves
-        else:                   b=10+round((1-(dx/half)**2))        # short: gentle rounded arc
-        b=max(10,min(13,b))
-        for r in range(11,b+1):
+        if   style=='sidepart': b=10*SZ+round((c-L)/span*4*SZ)            # swept across to one side
+        elif style=='long':     b=10*SZ+round(abs(dx)/half*3*SZ)          # center-part curtains
+        elif style=='spiky':    b=13*SZ if (c-L)%(3*SZ)==1 else 10*SZ     # jagged downward points
+        elif style=='wild':     b=10*SZ+((c*5+c//2)%4)*SZ                 # uneven messy fringe
+        elif style=='wavy':     b=10*SZ+round((1.5+1.5*math.sin((c-L)*0.8/SZ))*SZ)  # soft waves
+        else:                   b=10*SZ+round((1-(dx/half)**2)*SZ)        # short: gentle rounded arc
+        b=max(10*SZ,min(13*SZ,b))
+        for r in range(11*SZ,b+1):
             if 0<=r<HEADH and g[r][c]=='s': g[r][c]='h'
 
 def shade_hair(g, style='bob'):
@@ -149,7 +150,7 @@ def shade_hair(g, style='bob'):
         SP={'spiky':(8.5,0.0,0.46),'wild':(7.5,0.0,0.44),'long':(5.5,0.0,0.34),
             'wavy':(5.0,0.0,0.36),'sidepart':(6.0,-2.4,0.42),'short':(6.5,0.0,0.40)}
         nlocks,cdx,rw=SP.get(style,(6.5,0.0,0.40))
-        crown_r=r0-0.6; crownc=cxh+cdx
+        crown_r=r0-0.6; crownc=cxh+cdx*SZ
         for (r,c) in head:
             nx=(c-cxh)/rx; ny=(r-cyh)/ry
             v=1.0-nx*nx-ny*ny; nz=math.sqrt(v) if v>0 else 0.0
@@ -169,7 +170,7 @@ def shade_hair(g, style='bob'):
         r0=min(rr); r1=max(rr); cxd=(min(cc)+max(cc))/2.0
         for (r,c) in drape:
             tt=(r-r0)/max(1,(r1-r0))
-            ridge=math.cos(((c-cxd)/2.4)*math.pi)
+            ridge=math.cos(((c-cxd)/(2.4*SZ))*math.pi)
             s=(0.62-tt*1.1)+0.34*ridge
             g[r][c]=('j' if s>=0.66 else 'h' if s>=-0.02 else 'H' if s>=-0.55 else 'x')
 
@@ -190,228 +191,282 @@ def shade_body(g):
 
 def make_head(opt):
     g=[['.']*W for _ in range(HEADH)]
-    fcy,frx,fry = 15.5, 11.0, 10.8
+    fcy,frx,fry = 15.5*SZ, 11.0*SZ, 10.8*SZ
     for r in range(HEADH):
         for c in range(W):
-            if r>=9 and ((c-cx)/frx)**2 + ((r-fcy)/fry)**2 <= 1.0: g[r][c]='s'
+            if r>=9*SZ and ((c-cx)/frx)**2 + ((r-fcy)/fry)**2 <= 1.0: g[r][c]='s'
     P=build_hair(g, opt)
     fringe(g, opt.get('hair','bob'))
-    orx,ory,ocy = (14.6,13.8,12.2) if P.get('big') else (12.7,12.7,12.0)
+    orx,ory,ocy = (14.6*SZ,13.8*SZ,12.2*SZ) if P.get('big') else (12.7*SZ,12.7*SZ,12.0*SZ)
     # eyes
     def stamp_eye(ecx,ecy,big):
-        ry=2.9 if big else 2.6; rx=3.0 if big else 2.7
-        for dy in range(-4,4):
-            for dx in range(-4,4):
+        ry=2.9*SZ if big else 2.6*SZ; rx=3.0*SZ if big else 2.7*SZ
+        for dy in range(-4*SZ,4*SZ):
+            for dx in range(-4*SZ,4*SZ):
                 if (dx/rx)**2+(dy/ry)**2<=1.0:
                     rr,ccc=ecy+dy,ecx+dx
                     if 0<=rr<HEADH and 0<=ccc<W and g[rr][ccc]=='s': g[rr][ccc]='e'
-        for (dx,dy) in [(-1,-2),(0,-2),(-1,-1),(0,-1)]:
+        for (dx,dy) in [(-1*SZ,-2*SZ),(0,-2*SZ),(-1*SZ,-1*SZ),(0,-1*SZ)]:
             rr,ccc=ecy+dy,ecx+dx
             if 0<=rr<HEADH and 0<=ccc<W and g[rr][ccc]=='e': g[rr][ccc]='i'
-        rr,ccc=ecy+1,ecx+1
+        rr,ccc=ecy+1*SZ,ecx+1*SZ
         if 0<=rr<HEADH and 0<=ccc<W and g[rr][ccc]=='e': g[rr][ccc]='i'
     big=opt.get('eyes')=='big'
-    stamp_eye(11,15,big); stamp_eye(24,15,big)
+    stamp_eye(11*SZ,15*SZ,big); stamp_eye(24*SZ,15*SZ,big)
     if opt.get('glasses')=='round':
-        for (ecx,ecy) in [(11,15),(24,15)]:
-            for dy in range(-4,4):
-                for dx in range(-4,4):
-                    if abs((dx/3.5)**2+(dy/3.4)**2-1.0)<0.22:
+        for (ecx,ecy) in [(11*SZ,15*SZ),(24*SZ,15*SZ)]:
+            for dy in range(-4*SZ,4*SZ):
+                for dx in range(-4*SZ,4*SZ):
+                    if abs((dx/(3.5*SZ))**2+(dy/(3.4*SZ))**2-1.0)<0.22:
                         rr,ccc=ecy+dy,ecx+dx
                         if 0<=rr<HEADH and 0<=ccc<W and g[rr][ccc] in 'se': g[rr][ccc]='G'
-        for c in range(15,21):
-            if g[15][c]=='s': g[15][c]='G'
+        for c in range(15*SZ,21*SZ):
+            if g[15*SZ][c]=='s': g[15*SZ][c]='G'
     if opt.get('glasses')=='square':
-        for (x0,x1) in [(7,15),(20,28)]:
+        for (x0,x1) in [(7*SZ,15*SZ),(20*SZ,28*SZ)]:
             for x in range(x0,x1+1):
-                for y in (12,18):
+                for y in (12*SZ,18*SZ):
                     if g[y][x] in 'se': g[y][x]='G'
-            for y in range(12,19):
+            for y in range(12*SZ,19*SZ):
                 for x in (x0,x1):
                     if g[y][x] in 'se': g[y][x]='G'
-        for c in range(15,21):
-            if g[15][c]=='s': g[15][c]='G'
+        for c in range(15*SZ,21*SZ):
+            if g[15*SZ][c]=='s': g[15*SZ][c]='G'
     if opt.get('freckles'):
-        for (fx,fy) in [(8,18),(10,19),(25,19),(27,18),(9,17),(26,17)]:
+        for (fx,fy) in [(8*SZ,18*SZ),(10*SZ,19*SZ),(25*SZ,19*SZ),(27*SZ,18*SZ),(9*SZ,17*SZ),(26*SZ,17*SZ)]:
             if 0<=fy<HEADH and g[fy][fx]=='s': g[fy][fx]='d'
-    for bx in [8,9,25,26]:
-        if g[19][bx]=='s': g[19][bx]='d'
+    for bx in [8*SZ,9*SZ,25*SZ,26*SZ]:
+        if g[19*SZ][bx]=='s': g[19*SZ][bx]='d'
     exp=opt.get('mouth','neutral')
     if exp=='smile':
-        for c in range(15,21):
-            if g[21][c]=='s': g[21][c]='m'
-        for c in (14,21):
-            if g[20][c]=='s': g[20][c]='m'
+        for c in range(15*SZ,21*SZ):
+            if g[21*SZ][c]=='s': g[21*SZ][c]='m'
+        for c in (14*SZ,21*SZ):
+            if g[20*SZ][c]=='s': g[20*SZ][c]='m'
     elif exp=='grin':
-        for c in range(15,21):
-            if g[21][c]=='s': g[21][c]='m'
-        for c in range(16,20):
-            if g[22][c]=='s': g[22][c]='i'
+        for c in range(15*SZ,21*SZ):
+            if g[21*SZ][c]=='s': g[21*SZ][c]='m'
+        for c in range(16*SZ,20*SZ):
+            if g[22*SZ][c]=='s': g[22*SZ][c]='i'
     else:
-        for c in range(16,20):
-            if g[21][c]=='s': g[21][c]='m'
-        if g[20][17]=='s': g[20][17]='m'
-        if g[20][18]=='s': g[20][18]='m'
+        for c in range(16*SZ,20*SZ):
+            if g[21*SZ][c]=='s': g[21*SZ][c]='m'
+        if g[20*SZ][17*SZ]=='s': g[20*SZ][17*SZ]='m'
+        if g[20*SZ][18*SZ]=='s': g[20*SZ][18*SZ]='m'
     if opt.get('mustache'):
-        for c in range(13,23):
-            if g[20][c]=='s': g[20][c]='e'
-        for c in (13,22):
-            if g[19][c]=='s': g[19][c]='e'
+        for c in range(13*SZ,23*SZ):
+            if g[20*SZ][c]=='s': g[20*SZ][c]='e'
+        for c in (13*SZ,22*SZ):
+            if g[19*SZ][c]=='s': g[19*SZ][c]='e'
     if opt.get('goatee'):
-        for c in range(16,20):
-            if g[23][c]=='s': g[23][c]='e'
-        if g[22][17]=='s': g[22][17]='e'
-        if g[22][18]=='s': g[22][18]='e'
+        for c in range(16*SZ,20*SZ):
+            if g[23*SZ][c]=='s': g[23*SZ][c]='e'
+        if g[22*SZ][17*SZ]=='s': g[22*SZ][17*SZ]='e'
+        if g[22*SZ][18*SZ]=='s': g[22*SZ][18*SZ]='e'
     if opt.get('headphones'):
-        for c in range(5,31):
+        for c in range(5*SZ,31*SZ):
             x=(c-cx)/orx
             if abs(x)<=1.0:
                 br=int(round(ocy-ory*math.sqrt(max(0.0,1-x*x))))+1
                 for bb,col in ((br,'P'),(br+1,'p')):
                     if 0<=bb<HEADH and g[bb][c] in 'h.': g[bb][c]=col
-        for ux in (4,31):
-            for dy in range(-3,4):
-                for dx in range(-2,3):
-                    if (dx/2.2)**2+(dy/3.2)**2<=1.0:
-                        rr,ccc=15+dy,ux+dx
+        for ux in (4*SZ,31*SZ):
+            for dy in range(-3*SZ,4*SZ):
+                for dx in range(-2*SZ,3*SZ):
+                    if (dx/(2.2*SZ))**2+(dy/(3.2*SZ))**2<=1.0:
+                        rr,ccc=15*SZ+dy,ux+dx
                         if 0<=rr<HEADH and 0<=ccc<W: g[rr][ccc]='p'
-            for dy in range(-2,3):
-                if 0<=15+dy<HEADH: g[15+dy][ux]='G'
+            for dy in range(-2*SZ,3*SZ):
+                if 0<=15*SZ+dy<HEADH: g[15*SZ+dy][ux]='G'
     if opt.get('beret'):
-        for r in range(0,8):
+        for r in range(0,8*SZ):
             for c in range(W):
                 if g[r][c]=='h': g[r][c]='q'
         for c in range(W):
-            if g[3][c]=='q' and c<cx: g[3][c]='Q'
+            if g[3*SZ][c]=='q' and c<cx: g[3*SZ][c]='Q'
         for r in range(1,HEADH-1):
             for c in range(W):
                 if g[r][c]=='q' and g[r+1][c]=='h': g[r+1][c]='g'
-        g[0]=list('................bb..................')
+        g[0]=['.']*W
+        for c in range(16*SZ,18*SZ): g[0][c]='b'
     if opt.get('crown'):
-        g[0]=list('...........c..c..c..c..c............')
-        g[1]=list('...........ccccccccccccc............')
+        g[0]=['.']*W
+        for c in [11*SZ,13*SZ,15*SZ,17*SZ,19*SZ]: g[0][c]='c'
+        g[1]=['.']*W
+        for c in range(11*SZ,24*SZ): g[1][c]='c'
     skin_shade(g)
     return g
 
 def make_body(outfit, hairstyle):
-    g=[['.']*W for _ in range(9)]
-    bounds={0:(12,23),1:(11,24),2:(10,25),3:(10,25),4:(10,25),5:(10,25),6:(10,25),7:(11,23),8:(12,23)}
-    for r,(a,b) in bounds.items():
+    g=[['.']*W for _ in range(9*SZ)]
+    bounds={0:(12*SZ,23*SZ),1:(11*SZ,24*SZ),2:(10*SZ,25*SZ),3:(10*SZ,25*SZ),4:(10*SZ,25*SZ),
+            5:(10*SZ,25*SZ),6:(10*SZ,25*SZ),7:(11*SZ,23*SZ),8:(12*SZ,23*SZ)}
+    # expand bounds dict to cover all SZ rows per original row
+    full_bounds={}
+    for orig_r,(a,b) in bounds.items():
+        for sr in range(SZ):
+            full_bounds[orig_r*SZ+sr]=(a,b)
+    for r,(a,b) in full_bounds.items():
         for c in range(a,b+1): g[r][c]='b'
-    for r in (3,4,5):                       # hands
-        g[r][9]='s'; g[r][26]='s'
+    for r in range(3*SZ,6*SZ):                       # hands
+        g[r][9*SZ]='s'; g[r][26*SZ]='s'
     # subtle body shading
-    g[4][12]='k'; g[4][13]='k'; g[4][22]='B'; g[5][12]='k'; g[5][22]='B'
+    for sr in range(SZ):
+        g[4*SZ+sr][12*SZ]='k'; g[4*SZ+sr][13*SZ]='k'; g[4*SZ+sr][22*SZ]='B'
+        g[5*SZ+sr][12*SZ]='k'; g[5*SZ+sr][22*SZ]='B'
     # ---- outfit details ----
     if outfit=='robe':           # Jamesmie: gold-trim collar + medallion
-        for c in range(12,24): g[0][c]='c'
-        g[1][12]='c'; g[1][23]='c'
-        g[3][17]='c'; g[3][18]='c'; g[4][17]='c'   # medallion
+        for c in range(12*SZ,24*SZ):
+            for sr in range(SZ): g[0*SZ+sr][c]='c'
+        for sr in range(SZ):
+            g[1*SZ+sr][12*SZ]='c'; g[1*SZ+sr][23*SZ]='c'
+        for sr in range(SZ):
+            g[3*SZ+sr][17*SZ]='c'; g[3*SZ+sr][18*SZ]='c'; g[4*SZ+sr][17*SZ]='c'   # medallion
     elif outfit=='tie':          # Manager: white collar + tie
-        for c in range(12,24): g[0][c]='w'
-        g[1][15]='w'; g[1][16]='w'; g[1][19]='w'; g[1][20]='w'
-        for r in range(1,7): g[r][17]='g'; g[r][18]='g'
-        g[1][17]='w'; g[1][18]='w'
+        for c in range(12*SZ,24*SZ):
+            for sr in range(SZ): g[0*SZ+sr][c]='w'
+        for sr in range(SZ):
+            g[1*SZ+sr][15*SZ]='w'; g[1*SZ+sr][16*SZ]='w'; g[1*SZ+sr][19*SZ]='w'; g[1*SZ+sr][20*SZ]='w'
+        for r in range(1*SZ,7*SZ):
+            g[r][17*SZ]='g'; g[r][18*SZ]='g'
+        for sr in range(SZ):
+            g[1*SZ+sr][17*SZ]='w'; g[1*SZ+sr][18*SZ]='w'
     elif outfit=='cardigan':     # Reader: collar + button placket
-        for c in range(13,23): g[0][c]='w'
-        for r in range(1,7):
-            g[r][17]='k'; g[r][18]='k'
-        for r in (2,4,6): g[r][17]='w'   # buttons
+        for c in range(13*SZ,23*SZ):
+            for sr in range(SZ): g[0*SZ+sr][c]='w'
+        for r in range(1*SZ,7*SZ):
+            g[r][17*SZ]='k'; g[r][18*SZ]='k'
+        for orig_r in (2,4,6):
+            for sr in range(SZ): g[orig_r*SZ+sr][17*SZ]='w'   # buttons
     elif outfit=='hoodie':       # Coder: hood + drawstrings
-        for c in range(11,25): g[0][c]='k'
-        for c in range(12,24): g[1][c]='k'
-        g[1][14]='b'; g[1][21]='b'
-        for r in (2,3,4): g[r][16]='w'; g[r][19]='w'   # drawstrings
-        g[2][17]='k'; g[2][18]='k'
+        for c in range(11*SZ,25*SZ):
+            for sr in range(SZ): g[0*SZ+sr][c]='k'
+        for c in range(12*SZ,24*SZ):
+            for sr in range(SZ): g[1*SZ+sr][c]='k'
+        for sr in range(SZ):
+            g[1*SZ+sr][14*SZ]='b'; g[1*SZ+sr][21*SZ]='b'
+        for r in range(2*SZ,5*SZ):
+            g[r][16*SZ]='w'; g[r][19*SZ]='w'   # drawstrings
+        for sr in range(SZ):
+            g[2*SZ+sr][17*SZ]='k'; g[2*SZ+sr][18*SZ]='k'
     elif outfit=='jacket':       # Searcher: open jacket + white tee
-        for c in range(15,21):
-            for r in range(0,7):
+        for c in range(15*SZ,21*SZ):
+            for r in range(0,7*SZ):
                 if g[r][c]=='b': g[r][c]='w'
-        for r in range(1,7): g[r][14]='k'; g[r][21]='k'   # lapels
-        g[0][14]='k'; g[0][21]='k'
+        for r in range(1*SZ,7*SZ):
+            g[r][14*SZ]='k'; g[r][21*SZ]='k'   # lapels
+        for sr in range(SZ):
+            g[0*SZ+sr][14*SZ]='k'; g[0*SZ+sr][21*SZ]='k'
     elif outfit=='scarf':        # Writer: turtleneck + maroon scarf
-        for c in range(12,24): g[0][c]='r'
-        for c in range(11,25): g[1][c]='r'
-        g[2][12]='R'; g[2][13]='r'; g[2][14]='r'        # hanging end
-        for c in range(15,21): g[2][c]='r'
+        for c in range(12*SZ,24*SZ):
+            for sr in range(SZ): g[0*SZ+sr][c]='r'
+        for c in range(11*SZ,25*SZ):
+            for sr in range(SZ): g[1*SZ+sr][c]='r'
+        for sr in range(SZ):
+            g[2*SZ+sr][12*SZ]='R'; g[2*SZ+sr][13*SZ]='r'; g[2*SZ+sr][14*SZ]='r'        # hanging end
+        for c in range(15*SZ,21*SZ):
+            for sr in range(SZ): g[2*SZ+sr][c]='r'
     # ---- long / wavy hair draping over shoulders ----
     if hairstyle=='long':
-        for r in range(0,9):
-            cols=(5,6,7,8,27,28,29,30) if r<6 else (5,6,7,28,29,30)
+        for r in range(0,9*SZ):
+            cols=list(range(5*SZ,9*SZ))+list(range(27*SZ,31*SZ)) if r<6*SZ else list(range(5*SZ,8*SZ))+list(range(28*SZ,31*SZ))
             for c in cols:
                 if g[r][c]=='.': g[r][c]='h'
     elif hairstyle=='wavy':
-        for r in range(0,5):
-            for c in (6,7,28,29):
+        for r in range(0,5*SZ):
+            for c in list(range(6*SZ,8*SZ))+list(range(28*SZ,30*SZ)):
                 if g[r][c]=='.': g[r][c]='h'
     return g
 
 def make_back(opt):
     """Up/back view: full hair silhouette, no face. Keep crown/beret/headphones."""
     g=[['.']*W for _ in range(HEADH)]
-    fcy,frx,fry = 15.5, 11.0, 10.8
+    fcy,frx,fry = 15.5*SZ, 11.0*SZ, 10.8*SZ
     for r in range(HEADH):
         for c in range(W):
-            if r>=9 and ((c-cx)/frx)**2+((r-fcy)/fry)**2<=1.0: g[r][c]='s'
+            if r>=9*SZ and ((c-cx)/frx)**2+((r-fcy)/fry)**2<=1.0: g[r][c]='s'
     build_hair(g, opt)
     for r in range(HEADH):                 # back of head: skin area becomes hair
         for c in range(W):
             if g[r][c]=='s': g[r][c]='h'
     if opt.get('headphones'):
-        orx,ory,ocy = 12.7,12.7,12.0
-        for c in range(5,31):
+        orx,ory,ocy = 12.7*SZ,12.7*SZ,12.0*SZ
+        for c in range(5*SZ,31*SZ):
             x=(c-cx)/orx
             if abs(x)<=1.0:
                 br=int(round(ocy-ory*math.sqrt(max(0.0,1-x*x))))+1
                 for bb,col in ((br,'P'),(br+1,'p')):
                     if 0<=bb<HEADH and g[bb][c] in 'h.': g[bb][c]=col
-        for ux in (4,31):
-            for dy in range(-3,4):
-                for dx in range(-2,3):
-                    if (dx/2.2)**2+(dy/3.2)**2<=1.0 and 0<=15+dy<HEADH: g[15+dy][ux]='p'
-            for dy in range(-2,3):
-                if 0<=15+dy<HEADH: g[15+dy][ux]='G'
+        for ux in (4*SZ,31*SZ):
+            for dy in range(-3*SZ,4*SZ):
+                for dx in range(-2*SZ,3*SZ):
+                    if (dx/(2.2*SZ))**2+(dy/(3.2*SZ))**2<=1.0 and 0<=15*SZ+dy<HEADH: g[15*SZ+dy][ux]='p'
+            for dy in range(-2*SZ,3*SZ):
+                if 0<=15*SZ+dy<HEADH: g[15*SZ+dy][ux]='G'
     if opt.get('beret'):
-        for r in range(0,8):
+        for r in range(0,8*SZ):
             for c in range(W):
                 if g[r][c]=='h': g[r][c]='q'
         for c in range(W):
-            if g[3][c]=='q' and c<cx: g[3][c]='Q'
+            if g[3*SZ][c]=='q' and c<cx: g[3*SZ][c]='Q'
         for r in range(1,HEADH-1):
             for c in range(W):
                 if g[r][c]=='q' and g[r+1][c]=='h': g[r+1][c]='g'
-        g[0]=list('................bb..................')
+        g[0]=['.']*W
+        for c in range(16*SZ,18*SZ): g[0][c]='b'
     if opt.get('crown'):
-        g[0]=list('...........c..c..c..c..c............')
-        g[1]=list('...........ccccccccccccc............')
+        g[0]=['.']*W
+        for c in [11*SZ,13*SZ,15*SZ,17*SZ,19*SZ]: g[0][c]='c'
+        g[1]=['.']*W
+        for c in range(11*SZ,24*SZ): g[1][c]='c'
     return g
 
 def make_body_back(outfit, hairstyle):
     """Back of the torso: plain shirt + hood/scarf-from-behind + long-hair drape."""
-    g=[['.']*W for _ in range(9)]
-    bounds={0:(12,23),1:(11,24),2:(10,25),3:(10,25),4:(10,25),5:(10,25),6:(10,25),7:(11,23),8:(12,23)}
-    for r,(a,b) in bounds.items():
+    g=[['.']*W for _ in range(9*SZ)]
+    bounds={0:(12*SZ,23*SZ),1:(11*SZ,24*SZ),2:(10*SZ,25*SZ),3:(10*SZ,25*SZ),4:(10*SZ,25*SZ),
+            5:(10*SZ,25*SZ),6:(10*SZ,25*SZ),7:(11*SZ,23*SZ),8:(12*SZ,23*SZ)}
+    full_bounds={}
+    for orig_r,(a,b) in bounds.items():
+        for sr in range(SZ):
+            full_bounds[orig_r*SZ+sr]=(a,b)
+    for r,(a,b) in full_bounds.items():
         for c in range(a,b+1): g[r][c]='b'
-    for r in (3,4,5): g[r][9]='s'; g[r][26]='s'
-    g[4][12]='k'; g[5][12]='k'; g[4][22]='B'; g[5][22]='B'
+    for r in range(3*SZ,6*SZ): g[r][9*SZ]='s'; g[r][26*SZ]='s'
+    for sr in range(SZ):
+        g[4*SZ+sr][12*SZ]='k'; g[5*SZ+sr][12*SZ]='k'; g[4*SZ+sr][22*SZ]='B'; g[5*SZ+sr][22*SZ]='B'
     if outfit=='hoodie':
-        for c in range(11,25): g[0][c]='k'
-        for c in range(12,24): g[1][c]='k'
+        for c in range(11*SZ,25*SZ):
+            for sr in range(SZ): g[0*SZ+sr][c]='k'
+        for c in range(12*SZ,24*SZ):
+            for sr in range(SZ): g[1*SZ+sr][c]='k'
     elif outfit=='scarf':
-        for c in range(12,24): g[0][c]='r'
-        for c in range(11,25): g[1][c]='r'
+        for c in range(12*SZ,24*SZ):
+            for sr in range(SZ): g[0*SZ+sr][c]='r'
+        for c in range(11*SZ,25*SZ):
+            for sr in range(SZ): g[1*SZ+sr][c]='r'
     if hairstyle=='long':
-        for r in range(0,9):
-            cols=(5,6,7,8,27,28,29,30) if r<6 else (5,6,7,28,29,30)
+        for r in range(0,9*SZ):
+            cols=list(range(5*SZ,9*SZ))+list(range(27*SZ,31*SZ)) if r<6*SZ else list(range(5*SZ,8*SZ))+list(range(28*SZ,31*SZ))
             for c in cols:
                 if g[r][c]=='.': g[r][c]='h'
     elif hairstyle=='wavy':
-        for r in range(0,5):
-            for c in (6,7,28,29):
+        for r in range(0,5*SZ):
+            for c in list(range(6*SZ,8*SZ))+list(range(28*SZ,30*SZ)):
                 if g[r][c]=='.': g[r][c]='h'
     return g
 
-LEGS_CUTE = {
+def _upscale_legs(orig_rows):
+    """Nearest-neighbour upscale: each cell repeated SZ times horizontally,
+    each row repeated SZ times vertically."""
+    result=[]
+    for row in orig_rows:
+        expanded=''.join(ch*SZ for ch in row)
+        for _ in range(SZ):
+            result.append(expanded)
+    return result
+
+_LEGS_CUTE_ORIG = {
  'stand':['............llll...llll.............','............llll...llll.............',
           '............zzzz...zzzz.............','............zzzzz.zzzzz.............'],
  'walk1':['.............lllll..ll..............','.............lllll..ll..............',
@@ -419,6 +474,7 @@ LEGS_CUTE = {
  'walk2':['.............ll..lllll..............','.............ll..lllll..............',
           '.............zz..zzzzz..............','..............zzz.zzzz..............'],
 }
+LEGS_CUTE = {k: _upscale_legs(v) for k,v in _LEGS_CUTE_ORIG.items()}
 
 CFG=[
  ('Jamesmie','#fbbf24','#1a0a00','#f5d5a0',
@@ -438,32 +494,32 @@ ALLOWED=set('.shHjxbBnkdDLlzwcezmgGiPpqQrR')
 def validate(grid,name):
     ok=True
     for i,row in enumerate(grid):
-        if len(row)!=36: print(f'WIDTH {name} r{i}: {len(row)}'); ok=False
+        if len(row)!=W: print(f'WIDTH {name} r{i}: {len(row)}'); ok=False
         bad=set(row)-ALLOWED
         if bad: print(f'CHAR {name} r{i}: {sorted(bad)}'); ok=False
     return ok
 
 def assemble(name, opt, outfit, hairstyle):
-    """Return (bd, bu) as joined 36-wide strings (head+torso, 35 rows each)."""
+    """Return (bd, bu) as joined W-wide strings (head+torso, 35*SZ rows each)."""
     fg=make_head(opt)+make_body(outfit,hairstyle); shade_hair(fg,hairstyle); shade_body(fg)
     bg=make_back(opt)+make_body_back(outfit,hairstyle); shade_hair(bg,hairstyle); shade_body(bg)
     bd=[''.join(r) for r in fg]
     bu=[''.join(r) for r in bg]
     for tag,grid in (('BD',bd),('BU',bu)):
         if not validate(grid, f'{name}.{tag}'): raise SystemExit('grid errors')
-        assert len(grid)==35, f'{name}.{tag} height {len(grid)} != 35'
+        assert len(grid)==35*SZ, f'{name}.{tag} height {len(grid)} != {35*SZ}'
     return bd,bu
 
 def all_frames_uniform():
-    """Assert every assembled full frame (head+torso+each leg variant) is 39x36."""
+    """Assert every assembled full frame (head+torso+each leg variant) is 39*SZ x W."""
     for name,bd,hr,sk,opt,outfit,hairstyle in CFG:
         b_d,b_u=assemble(name,opt,outfit,hairstyle)
         for top in (b_d,b_u):
             for lk in ('stand','walk1','walk2'):
                 full=top+LEGS_CUTE[lk]
-                assert len(full)==39, f'{name} {lk} height {len(full)}'
+                assert len(full)==39*SZ, f'{name} {lk} height {len(full)}'
                 if not validate(full, f'{name}.{lk}'): raise SystemExit('grid errors')
-    print('all frames uniform: 39x36')
+    print(f'all frames uniform: {39*SZ}x{W}')
 
 def js_array(name, rows):
     body=',\n'.join("  '"+r+"'" for r in rows)
@@ -472,7 +528,7 @@ def js_array(name, rows):
 def emit_js():
     out=[]
     out.append('// ============================================================')
-    out.append('// CUTE SPRITES (36-wide, spriteScale 1) — generated by py/gen_sprites.py.')
+    out.append(f'// CUTE SPRITES ({W}-wide, spriteScale 1) — generated by py/gen_sprites.py.')
     out.append('// DO NOT hand-edit; rerun: python py/gen_sprites.py --emit')
     out.append('// ============================================================')
     for lk,const in (('stand','LEGS_CUTE_STAND'),('walk1','LEGS_CUTE_WALK1'),('walk2','LEGS_CUTE_WALK2')):
