@@ -1882,12 +1882,12 @@ const drawAgent = (agent) => {
   // Floor contact shadow grounds the character (skip when seated — feet are under the desk).
   if (!seated) {
     const shW = sprW * 0.30;
-    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, shW);
-    grad.addColorStop(0, 'rgba(0,0,0,0.55)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.save();
     ctx.translate(agent.pos.x, agent.pos.y);
     ctx.scale(1, 0.34);
+    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, shW);
+    grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(0, 0, shW, 0, Math.PI * 2);
