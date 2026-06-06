@@ -121,10 +121,66 @@ def last_assistant_text(transcript_path):
         window *= 4             # assistant text is further back — widen and retry
 
 def atomic_write(path, data):
-    tmp = str(path) + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False)
-    os.replace(tmp, str(path))
+    # Unique per-process scratch name so concurrent writers never collide on one
+    # tmp file; removed even when os.replace fails (e.g. Windows file lock).
+    tmp = '%s.%d.tmp' % (str(path), os.getpid())
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, str(path))
+    finally:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+
+
+_LOCK_TIMEOUT = 0.5   # max seconds to wait for the lock — keeps tool latency low
+_LOCK_STALE = 5.0     # steal a lock file older than this (holder crashed)
+
+def update_events(events_path, lock_path, mutate):
+    """Serialize the read-modify-write of agent-events.json across concurrent
+    hook processes. Parallel tool calls fire hooks at the same time; without this
+    they clobber each other's writes (last-writer-wins lost updates). Acquires an
+    exclusive lock file, reads current state, applies mutate(existing), and writes
+    the result back when mutate returns a dict. Best-effort: after _LOCK_TIMEOUT it
+    proceeds without the lock rather than delaying the tool call, and it steals a
+    stale lock left by a crashed holder. Never raises."""
+    deadline = time.time() + _LOCK_TIMEOUT
+    have_lock = False
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            have_lock = True
+            break
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lock_path) > _LOCK_STALE:
+                    os.remove(lock_path)
+                    continue
+            except OSError:
+                pass
+            if time.time() >= deadline:
+                break          # give up waiting; a rare lost update beats blocking
+            time.sleep(0.01)
+        except OSError:
+            break              # cannot create a lock at all -> proceed unlocked
+    try:
+        try:
+            existing = json.loads(events_path.read_text(encoding='utf-8'))
+        except Exception:
+            existing = {'current': None, 'user_message': None, 'last_completed': None}
+        result = mutate(existing)
+        if result is not None:
+            atomic_write(events_path, result)
+    finally:
+        if have_lock:
+            try:
+                os.remove(lock_path)
+            except OSError:
+                pass
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else 'pre'
@@ -132,6 +188,7 @@ def main():
     # office.html fetches it (./agent-events.json), so target the parent dir.
     here = Path(__file__).parent.parent
     events_path = here / 'agent-events.json'
+    lock_path = str(here / 'agent-events.lock')
 
     try:
         raw = sys.stdin.buffer.read()
@@ -139,75 +196,70 @@ def main():
     except Exception:
         sys.exit(0)
 
-    try:
-        existing = json.loads(events_path.read_text(encoding='utf-8'))
-    except Exception:
-        existing = {'current': None, 'user_message': None, 'last_completed': None}
-
     ts = int(time.time() * 1000)
-
-    if mode == 'user':
-        text = (payload.get('prompt') or '')[:200]
-        existing['user_message'] = {'text': text, 'timestamp': ts}
-        atomic_write(events_path, existing)
-        sys.exit(0)
-
-    if mode == 'stop':
-        transcript_path = payload.get('transcript_path', '')
-        text = last_assistant_text(transcript_path)
-        if text:
-            existing['assistant_response'] = {'text': text[:200], 'timestamp': ts}
-            atomic_write(events_path, existing)
-        sys.exit(0)
-
     tool_name = payload.get('tool_name', '')
     tool_input = payload.get('tool_input') or {}
     agent = TOOL_TO_AGENT.get(tool_name)
 
-    # The assistant's narration accompanying this tool call is the latest
-    # assistant text in the transcript → the Writer voices it (flowing, 1 row).
-    # Captured for every PreToolUse, even tools with no office agent.
-    if mode == 'pre':
-        narration = last_assistant_text(payload.get('transcript_path', ''))
-        if narration:
-            existing['writer_message'] = {'text': narration[:200], 'timestamp': ts}
-        if not agent:
-            atomic_write(events_path, existing)   # persist narration even for unmapped tools
-            sys.exit(0)
+    # Derive transcript-dependent values BEFORE locking: last_assistant_text can
+    # read multiple MB, and holding the lock across it would serialize every
+    # parallel hook behind one slow disk read. The lock then wraps only the quick
+    # read-modify-write of the small JSON file.
+    user_text = stop_text = narration = label = detail = None
 
-    if not agent:
+    if mode == 'user':
+        user_text = (payload.get('prompt') or '')[:200]
+    elif mode == 'stop':
+        stop_text = last_assistant_text(payload.get('transcript_path', ''))
+        if not stop_text:
+            sys.exit(0)
+    elif mode == 'pre':
+        narration = last_assistant_text(payload.get('transcript_path', ''))
+        if agent:
+            label = extract_label(tool_name, tool_input)
+            detail = extract_detail(tool_name, tool_input)
+        elif not narration:
+            sys.exit(0)            # unmapped tool, no narration -> nothing to write
+    elif mode == 'post':
+        if not agent:
+            sys.exit(0)
+        label = extract_label(tool_name, tool_input)
+        detail = extract_detail(tool_name, tool_input)
+    else:
         sys.exit(0)
 
-    label = extract_label(tool_name, tool_input)
-    detail = extract_detail(tool_name, tool_input)
-
-    if mode == 'pre':
-        existing['current'] = {
-            'tool': tool_name,
-            'agent': agent,
-            'label': label,
-            'detail': detail,
-            'status': 'active',
-            'timestamp': ts,
-        }
-        existing.setdefault('events', [])
-        existing['events'].append({'agent': agent, 'label': label, 'detail': detail, 'ts': ts})
-        existing['events'] = existing['events'][-10:]
-    elif mode == 'post':
-        if (existing.get('current')
-                and existing['current'].get('agent') == agent
-                and existing['current'].get('tool') == tool_name):
-            existing['current']['status'] = 'done'
-            existing['last_completed'] = {
-                'tool': tool_name,
-                'agent': agent,
-                'label': label,
-                'timestamp': ts,
+    def mutate(existing):
+        if mode == 'user':
+            existing['user_message'] = {'text': user_text, 'timestamp': ts}
+            return existing
+        if mode == 'stop':
+            existing['assistant_response'] = {'text': stop_text[:200], 'timestamp': ts}
+            return existing
+        if mode == 'pre':
+            if narration:
+                existing['writer_message'] = {'text': narration[:200], 'timestamp': ts}
+            if not agent:
+                return existing
+            existing['current'] = {
+                'tool': tool_name, 'agent': agent, 'label': label,
+                'detail': detail, 'status': 'active', 'timestamp': ts,
             }
-        else:
-            sys.exit(0)
+            existing.setdefault('events', [])
+            existing['events'].append({'agent': agent, 'label': label, 'detail': detail, 'ts': ts})
+            existing['events'] = existing['events'][-10:]
+            return existing
+        if mode == 'post':
+            cur = existing.get('current')
+            if cur and cur.get('agent') == agent and cur.get('tool') == tool_name:
+                existing['current']['status'] = 'done'
+                existing['last_completed'] = {
+                    'tool': tool_name, 'agent': agent, 'label': label, 'timestamp': ts,
+                }
+                return existing
+            return None
+        return None
 
-    atomic_write(events_path, existing)
+    update_events(events_path, lock_path, mutate)
     sys.exit(0)
 
 if __name__ == '__main__':

@@ -4,7 +4,8 @@ __pycache__/
 
 # Runtime state — rewritten by log-event.py on every tool call (recreated on demand)
 agent-events.json
-agent-events.json.tmp
+agent-events.json.*.tmp
+agent-events.lock
 
 # Temp pixel-art render files from the visual-dev workflow (see CLAUDE.md)
 __*.png
