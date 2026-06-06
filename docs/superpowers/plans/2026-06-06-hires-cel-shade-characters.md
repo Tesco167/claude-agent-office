@@ -236,11 +236,23 @@ git commit -m "feat: swap in hi-res cel-shaded agent sprites"
 
 ---
 
-## Task 8: Fix sprite scale + all position constants for the larger sprite
+## Task 8: World-scale (K=SZ=3) + responsive canvas + position constants
 
-**Files:** Modify `js/app.js` — `agents` roster (`spriteScale`), `WORK_POS`, `SIT_POS`,
-`QUEUE_SPOTS`, `drawChairBack` (~L2660 cover box), `drawAgent` (~L1908 sizing/label/shadow),
-the y-sort/`NAV_OBSTACLES` only if footprint changes.
+> **Decision (user, Task 1 checkpoint):** SZ=3 **and** a responsive dashboard. Crisp pixel art
+> needs an integer sprite scale, so to gain detail without sprites overflowing the rooms we
+> render the whole scene at higher internal resolution (world ×`K`, `K`=`SZ`=3) and make the
+> canvas **scale-to-fit the viewport** — large screens stay crisp, small ones downscale the
+> whole sheet. Approach: in `css/style.css`/`office.html` set the canvas
+> `max-width:100vw; max-height:100vh; width:auto; height:auto; image-rendering:pixelated`
+> (centered); in `js/app.js` multiply world coords (`ROOMS`/desks/`WORK_POS`/`SIT_POS`/
+> `QUEUE_SPOTS`/`NAV_OBSTACLES`/decor) by `K` — or `ctx.scale(K,K)` once at the top of `draw()`
+> and leave coords as-is (simpler; check line widths/text) — and draw sprites at
+> `spriteScale = SZ` 1:1 with world pixels. The steps below then re-anchor/verify.
+
+**Files:** Modify `office.html` + `css/style.css` (responsive canvas) and `js/app.js`
+(canvas `W`/`H`, world `K`-scale, `agents` `spriteScale`, `WORK_POS`, `SIT_POS`, `QUEUE_SPOTS`,
+`drawChairBack` (~L2660 cover box), `drawAgent` (~L1908 sizing/label/shadow), y-sort,
+`NAV_OBSTACLES`).
 
 - [ ] **Step 1 — Set `spriteScale`.** The sprites are now `SZ`× taller; decide on-screen size
   (the reference shows larger characters). Set each agent's `spriteScale` so `gridRows *

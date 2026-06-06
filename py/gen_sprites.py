@@ -21,7 +21,7 @@ def color_map(body_hex,hair_hex,skin_hex):
             'q':hex2rgb('#3a3d44'),'Q':hex2rgb('#56595f'),
             'r':hex2rgb('#a23b3b'),'R':hex2rgb('#c05a5a')}   # scarf maroon
 FORM=set('sdDLlz'); HAIR=set('hHjx')   # hair+body tones flat; volume comes from shade_hair / shade_body
-SZ = 2                      # resolution multiplier vs the original 36-wide art
+SZ = 3                      # resolution multiplier vs the original 36-wide art
 W=36*SZ; HEADH=26*SZ; cx=(W-1)/2
 
 def skin_shade(g):

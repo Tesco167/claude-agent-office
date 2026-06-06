@@ -31,8 +31,9 @@ Goal:
 
 ## 2. Locked decisions (from brainstorming)
 
-- **Resolution:** enlarge the sprite canvas (target ~48–72 px) to reach reference detail.
-  Exact size locked in Phase 0 (§8) via a rendered prototype.
+- **Resolution:** enlarge the sprite canvas to reach reference detail. **Locked: `SZ=3`**
+  (108×117 px) via the Phase 0 prototype + a **responsive canvas** (render the scene at higher
+  internal resolution, scale-to-fit the viewport) so the larger sprites fit any screen crisply.
 - **Roster unchanged:** keep the six agents and the `TOOL_TO_AGENT` mapping
   (Jamesmie / Manager / Reader / Editor(`coder`) / Searcher / Writer). Only their *look* changes.
 - **Hair highlights are colored, not white** — a lightened hair tone (white-blend ≈ 0.17),
