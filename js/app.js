@@ -1559,7 +1559,7 @@ const SPRITES_WRITER2 = {
 const agents = {
   manager: {
     name: 'Manager', color: C.managerIndigo, home: 'boss',
-    hairColor: '#1a1a2e', sprites: SPRITES_MANAGER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#1a1a2e', skinColor: '#c68642', sprites: SPRITES_MANAGER2, spriteScale: 1, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 315, y: 268 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1571,7 +1571,7 @@ const agents = {
   },
   jamesmie: {
     name: 'Jamesmie', color: C.jamesGold, home: 'boss',
-    hairColor: '#1a0a00', sprites: SPRITES_JAMESMIE2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#1a0a00', skinColor: '#f5d5a0', sprites: SPRITES_JAMESMIE2, spriteScale: 1, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 100, y: 320 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1583,7 +1583,7 @@ const agents = {
   },
   reader: {
     name: 'Reader', color: C.readerBlue, home: 'dev',
-    hairColor: '#8b4513', sprites: SPRITES_READER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#8b4513', skinColor: '#ffe0bd', sprites: SPRITES_READER2, spriteScale: 1, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 350, y: 300 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1595,7 +1595,7 @@ const agents = {
   },
   coder: {
     name: 'Editor', color: C.coderGreen, home: 'ops',
-    hairColor: '#1a237e', sprites: SPRITES_CODER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#1a237e', skinColor: '#8d5524', sprites: SPRITES_CODER2, spriteScale: 1, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 110, y: 470 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1607,7 +1607,7 @@ const agents = {
   },
   searcher: {
     name: 'Searcher', color: C.searchOrange, home: 'dev',
-    hairColor: '#6b0f1a', sprites: SPRITES_SEARCHER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#6b0f1a', skinColor: '#e0ac69', sprites: SPRITES_SEARCHER2, spriteScale: 1, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 500, y: 340 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1619,7 +1619,7 @@ const agents = {
   },
   writer: {
     name: 'Writer', color: C.writerTeal, home: 'dev',
-    hairColor: '#0f3a35', sprites: SPRITES_WRITER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#0f3a35', skinColor: '#d9b38c', sprites: SPRITES_WRITER2, spriteScale: 1, _lastDY: 1,
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 600, y: 250 }, targetPos: null,
     speed: 85, state: 'idle_wander',
