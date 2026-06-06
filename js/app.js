@@ -1879,7 +1879,23 @@ const drawAgent = (agent) => {
   const bob = (agent._moving && !seated)
     ? Math.round(Math.abs(Math.sin(agent._walkPhase || 0)) * 2.5) : 0;
 
-  drawSprite(grid, x, y - bob, agent.color, agent.facingLeft, agent.hairColor, sc);
+  // Floor contact shadow grounds the character (skip when seated — feet are under the desk).
+  if (!seated) {
+    const shW = sprW * 0.30;
+    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, shW);
+    grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.translate(agent.pos.x, agent.pos.y);
+    ctx.scale(1, 0.34);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, shW, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawSprite(grid, x, y - bob, agent.color, agent.facingLeft, agent.hairColor, agent.skinColor, sc);
 
   const labelFont = '11px "Leelawadee UI","Tahoma",sans-serif';
   ctx.font = labelFont;
