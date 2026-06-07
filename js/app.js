@@ -362,15 +362,17 @@ const drawText = (str, x, y, opts = {}) => {
   ctx.restore();
 };
 
+// grounded contact shadow under an object — soft penumbra + darker core, offset down-right
+// (opposite the top-left key light) so pieces sit on the floor instead of floating.
 const shadow = (x, y, w, h) => {
   ctx.save();
-  ctx.globalAlpha = 0.4;
-  rect(x + 3, y + 3, w, h, '#000');
+  rect(x + 3, y + 6, w, h, 'rgba(0,0,0,0.36)');
+  rect(x + 4, y + 7, w - 2, h - 2, 'rgba(0,0,0,0.42)');
   ctx.restore();
 };
 
 // faux-3D bevel: light top/left edge, dark bottom/right edge.
-const bevel = (x, y, w, h, light = 'rgba(255,255,255,0.12)', dark = 'rgba(0,0,0,0.30)') => {
+const bevel = (x, y, w, h, light = 'rgba(255,255,255,0.22)', dark = 'rgba(0,0,0,0.46)') => {
   rect(x, y, w, 2, light);
   rect(x, y, 2, h, light);
   rect(x, y + h - 2, w, 2, dark);
@@ -385,6 +387,7 @@ const drawBossDesk = (x, y, w, h) => {
   const base = '#4a3322';
   shadow(x, y, w, h);
   rect(x, y, w, h, base);
+  bevel(x, y, w, h);
   rect(x, y, w, Math.round(h / 2), shadeHex(base, 1.12));        // top-down sheen
   for (let i = 1; i < 5; i++) rect(x + 8, y + Math.round(i * h / 5), w - 16, 1, 'rgba(0,0,0,0.10)');
   rect(x + 6, y + 4, w - 12, 1, 'rgba(255,255,255,0.06)');
@@ -434,6 +437,7 @@ const drawManagerDesk = (x, y, w, h) => {
   const base = '#2c2940';                 // cool graphite (vs boss warm walnut)
   shadow(x, y, w, h);
   rect(x, y, w, h, base);
+  bevel(x, y, w, h);
   rect(x, y, w, Math.round(h / 2), shadeHex(base, 1.14));       // top-down sheen
   for (let i = 1; i < 5; i++) rect(x + 8, y + Math.round(i * h / 5), w - 16, 1, 'rgba(0,0,0,0.10)');
   rect(x + 6, y + 4, w - 12, 1, 'rgba(255,255,255,0.05)');
@@ -615,6 +619,7 @@ const drawOfficeChair = (x, y, base = '#33333c') => {
 // Desk monitor (bezel + screen base). Screen CONTENT + glow are layered by
 // drawDetails(); this is the physical panel with a lifted bezel + top sheen.
 const drawDeskMonitor = (mx, my, screenCol) => {
+  shadow(mx, my, 40, 28);
   rect(mx - 1, my - 1, 42, 30, '#0c0c12');          // outer bezel rim
   rect(mx, my, 40, 28, '#1a2a3a');                  // bezel
   rect(mx + 2, my + 2, 36, 24, screenCol);          // screen base
@@ -631,6 +636,7 @@ const drawGamingChairTopDown = (x, y, base = '#2d2d4e') => {
   rect(x + 3, y + 9, 20, 16, cushion);                 // cushion
   rect(x + 3, y + 9, 20, 2, 'rgba(255,255,255,0.10)');
   rect(x + 9, y + 1, 8, 4, headHi);                    // headrest hi
+  bevel(x, y, 26, 28);
 };
 
 const drawServerRackTopDown = (x, y) => {
@@ -667,6 +673,7 @@ const drawSofaTopDown = (x, y, w, h) => {
   rect(x + w - 6, y, 6, h, C.sofaDark);                // arm R
   rect(x + w - 6, y, 6, 2, 'rgba(255,255,255,0.10)');
   rect(x, y + h - 2, w, 2, 'rgba(0,0,0,0.30)');        // base shadow
+  bevel(x, y, w, h);
 };
 
 const drawCoffeeMachineTopDown = (x, y) => {
@@ -686,6 +693,7 @@ const drawCoffeeMachineTopDown = (x, y) => {
 const drawWhiteboardTopDown = (x, y, w) => {
   shadow(x, y, w, 18);
   rect(x, y, w, 18, '#e8e8e8');
+  bevel(x, y, w, 18);
   rect(x + 2, y + 2, w - 4, 14, '#f8f8f8');
   rect(x + 6,  y + 5, 18, 2, '#2d6b8b');
   rect(x + 28, y + 8, 24, 2, '#8b1a1a');
@@ -741,6 +749,7 @@ const drawOledTVTopDown = (x, y, w) => {
 const drawMonitorPanelTopDown = (x, y, w) => {
   shadow(x, y, w, 18);
   rect(x, y, w, 18, '#0a1a0a');
+  bevel(x, y, w, 18);
   const cw = (w - 8) / 4;
   for (let i = 0; i < 4; i++) {
     rect(x + 4 + i * cw, y + 4, cw - 3, 10, '#0a2a0a');
@@ -752,6 +761,7 @@ const drawMonitorPanelTopDown = (x, y, w) => {
 const drawCrateTopDown = (x, y, s) => {
   shadow(x, y, s, s);
   rect(x, y, s, s, '#5a4326');
+  bevel(x, y, s, s);
   rect(x + 2, y + 2, s - 4, s - 4, '#6b4f2d');
   rect(x, y + s / 2 - 1, s, 2, '#3a2a16');
   rect(x + s / 2 - 1, y, 2, s, '#3a2a16');
