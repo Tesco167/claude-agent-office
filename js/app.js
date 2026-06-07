@@ -1019,7 +1019,7 @@ const floorPlank = (g, r) => {
     g.fillStyle = top;  g.fillRect(x0, py, x1 - x0, 1);
     g.fillStyle = seam; g.fillRect(x0, py + h2 - 1, x1 - x0, 1);
     g.fillStyle = 'rgba(0,0,0,0.18)';
-    for (let gx = x0 + ((i * 37) % 60); gx < x1; gx += 80) g.fillRect(gx, py + 3, 1, h2 - 5);
+    for (let gx = x0 + ((i * 37) % 60); gx < x1; gx += 80) g.fillRect(gx, py + 3, 1, Math.max(0, h2 - 5));
   }
 };
 
