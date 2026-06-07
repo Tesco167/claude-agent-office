@@ -387,7 +387,6 @@ const drawBossDesk = (x, y, w, h) => {
   const base = '#4a3322';
   shadow(x, y, w, h);
   rect(x, y, w, h, base);
-  bevel(x, y, w, h);
   rect(x, y, w, Math.round(h / 2), shadeHex(base, 1.12));        // top-down sheen
   for (let i = 1; i < 5; i++) rect(x + 8, y + Math.round(i * h / 5), w - 16, 1, 'rgba(0,0,0,0.10)');
   rect(x + 6, y + 4, w - 12, 1, 'rgba(255,255,255,0.06)');
@@ -437,7 +436,6 @@ const drawManagerDesk = (x, y, w, h) => {
   const base = '#2c2940';                 // cool graphite (vs boss warm walnut)
   shadow(x, y, w, h);
   rect(x, y, w, h, base);
-  bevel(x, y, w, h);
   rect(x, y, w, Math.round(h / 2), shadeHex(base, 1.14));       // top-down sheen
   for (let i = 1; i < 5; i++) rect(x + 8, y + Math.round(i * h / 5), w - 16, 1, 'rgba(0,0,0,0.10)');
   rect(x + 6, y + 4, w - 12, 1, 'rgba(255,255,255,0.05)');
