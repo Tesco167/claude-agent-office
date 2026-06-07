@@ -987,6 +987,75 @@ const shadeHex = (hex, f) => {
   return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 };
 
+// ── Per-room floor materials (rendered once into an offscreen cache, blitted each frame) ──
+const FLOOR_STYLE = { boss: 'tile', dev: 'tile', ops: 'grate', lounge: 'plank' };
+const TILE_OPTS = {
+  boss: { tile: 40, hi: 1.22, grout: 0.60 },   // large purple tiles
+  dev:  { tile: 28, hi: 1.30, grout: 0.60 },   // smaller teal tiles, higher contrast
+};
+const _floorBounds = (r) => [r.x + WALL, r.y + 28, r.x + r.w - WALL, r.y + r.h - WALL];
+
+const floorTile = (g, r, o) => {
+  const [x0, y0, x1, y1] = _floorBounds(r), base = r.floor, t = o.tile;
+  const hi = shadeHex(base, o.hi), sh = shadeHex(base, 0.82), grout = shadeHex(base, o.grout);
+  g.fillStyle = base; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+  for (let ty = y0; ty < y1; ty += t) for (let tx = x0; tx < x1; tx += t) {
+    const tw = Math.min(t, x1 - tx), th = Math.min(t, y1 - ty);
+    g.fillStyle = hi; g.fillRect(tx, ty, tw, 1); g.fillRect(tx, ty, 1, th);   // top+left sheen
+    g.fillStyle = sh; g.fillRect(tx, ty + th - 1, tw, 1);                      // bottom shade
+  }
+  g.fillStyle = grout;
+  for (let tx = x0; tx <= x1; tx += t) g.fillRect(tx, y0, 1, y1 - y0);
+  for (let ty = y0; ty <= y1; ty += t) g.fillRect(x0, ty, x1 - x0, 1);
+};
+
+const floorPlank = (g, r) => {
+  const [x0, y0, x1, y1] = _floorBounds(r), base = r.floor, ph = 14;
+  const seam = shadeHex(base, 0.58), top = shadeHex(base, 1.28);
+  let i = 0;
+  for (let py = y0; py < y1; py += ph, i++) {
+    const h2 = Math.min(ph, y1 - py), tone = shadeHex(base, i % 2 ? 1.12 : 0.94);
+    g.fillStyle = tone; g.fillRect(x0, py, x1 - x0, h2);
+    g.fillStyle = top;  g.fillRect(x0, py, x1 - x0, 1);
+    g.fillStyle = seam; g.fillRect(x0, py + h2 - 1, x1 - x0, 1);
+    g.fillStyle = 'rgba(0,0,0,0.18)';
+    for (let gx = x0 + ((i * 37) % 60); gx < x1; gx += 80) g.fillRect(gx, py + 3, 1, h2 - 5);
+  }
+};
+
+const floorGrate = (g, r) => {
+  const [x0, y0, x1, y1] = _floorBounds(r), base = shadeHex(r.floor, 1.12), p = 30;
+  const hi = shadeHex(base, 1.5), sh = shadeHex(base, 0.6), seam = shadeHex(base, 0.45),
+        bolt = shadeHex(base, 0.4);
+  g.fillStyle = base; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+  for (let py = y0; py < y1; py += p) for (let px = x0; px < x1; px += p) {
+    const pw = Math.min(p, x1 - px), h2 = Math.min(p, y1 - py);
+    g.fillStyle = hi; g.fillRect(px + 1, py + 1, pw - 2, 1); g.fillRect(px + 1, py + 1, 1, h2 - 2);
+    g.fillStyle = sh; g.fillRect(px + 1, py + h2 - 2, pw - 2, 1); g.fillRect(px + pw - 2, py + 1, 1, h2 - 2);
+    g.fillStyle = bolt;
+    for (const bx of [px + 3, px + pw - 4]) for (const by of [py + 3, py + h2 - 4]) g.fillRect(bx, by, 2, 2);
+  }
+  g.fillStyle = seam;
+  for (let px = x0; px <= x1; px += p) g.fillRect(px, y0, 1, y1 - y0);
+  for (let py = y0; py <= y1; py += p) g.fillRect(x0, py, x1 - x0, 1);
+};
+
+// Built once: render every room's floor into an offscreen canvas at device resolution.
+let _floorCache = null;
+const buildFloorCache = () => {
+  const fc = document.createElement('canvas');
+  fc.width = W * DPR; fc.height = H * DPR;
+  const g = fc.getContext('2d');
+  g.scale(DPR, DPR);
+  for (const [k, r] of Object.entries(ROOMS)) {
+    const style = FLOOR_STYLE[k];
+    if (style === 'tile') floorTile(g, r, TILE_OPTS[k]);
+    else if (style === 'plank') floorPlank(g, r);
+    else if (style === 'grate') floorGrate(g, r);
+  }
+  _floorCache = fc;
+};
+
 // Linear blend from hex toward target hex by t in [0,1] (used for hair specular).
 const blendHex = (hex, target, t) => {
   const a = parseInt(hex.slice(1), 16), b = parseInt(target.slice(1), 16);
@@ -2887,18 +2956,9 @@ const drawChairBack = (key, ag) => {
 
 // Subtle tiled floor per room — drawn over the floor fill, under furniture.
 const drawFloors = () => {
-  for (const r of Object.values(ROOMS)) {
-    const x0 = r.x + WALL, y0 = r.y + 28, x1 = r.x + r.w - WALL, y1 = r.y + r.h - WALL;
-    ctx.save();
-    ctx.globalAlpha = 0.05;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let gx = x0 + 18; gx < x1; gx += 36) { ctx.moveTo(gx, y0); ctx.lineTo(gx, y1); }
-    for (let gy = y0 + 18; gy < y1; gy += 36) { ctx.moveTo(x0, gy); ctx.lineTo(x1, gy); }
-    ctx.stroke();
-    ctx.restore();
-  }
+  if (!_floorCache) buildFloorCache();
+  // source is W*DPR×H*DPR, dest is W×H user units → 1:1 crisp through the DPR transform.
+  ctx.drawImage(_floorCache, 0, 0, W, H);
 };
 
 // Screen content + glow, desk accessories, and wall decor — over furniture, under agents.
