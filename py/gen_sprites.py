@@ -135,11 +135,12 @@ def fringe(g, style):
             if 0<=r<HEADH and g[r][c] in ('s','.'): g[r][c]='h'
 
 def shade_hair(g, style='bob'):
-    """Volumetric hair shading: treat the head-hair mass as a sphere and ramp it
-    over 4 tones (j/h/H/x) by the surface normal (light from upper-left-front),
-    modulated by lock ridges that fan from the crown so it reads as 3D locks, not
-    a flat blob. Lock count / part offset / ridge depth vary per hairstyle so each
-    style flows the way its shape implies. Mutates g (list-of-lists).
+    """Volumetric hair shading: treat the head-hair mass as a sphere lit from the
+    upper-left-front, then carve VERTICAL strand grooves (not a radial fan) into it
+    so the hair falls with gravity like the reference instead of reading as a
+    sunburst. Grooves only darken (gaps between clumps); a small, confined top-of-
+    head shine adds a few colored catch-lights. Per-style strand count / groove
+    depth / outward fan vary the flow. Mutates g (list-of-lists).
     Head dome = rows < HEADH; over-shoulder drape = rows >= HEADH."""
     rows=len(g)
     head=[(r,c) for r in range(min(HEADH,rows)) for c in range(W) if g[r][c]=='h']
@@ -149,20 +150,31 @@ def shade_hair(g, style='bob'):
         cxh=(c0+c1)/2.0; cyh=(r0+r1)/2.0
         rx=max(1.0,(c1-c0)/2.0+0.5); ry=max(1.0,(r1-r0)/2.0+0.5)
         Lx,Ly,Lz=-0.42,-0.55,0.72
-        # per-style: (lock count per radian, crown x-offset = part side, ridge weight)
-        # nlocks scales with SZ so on-screen lock width stays constant regardless of resolution
-        SP={'spiky':(8.5*SZ,0.0,0.46),'wild':(7.5*SZ,0.0,0.44),'long':(5.5*SZ,0.0,0.34),
-            'wavy':(5.0*SZ,0.0,0.36),'sidepart':(6.0*SZ,-2.4,0.42),'short':(6.5*SZ,0.0,0.40)}
-        nlocks,cdx,rw=SP.get(style,(6.5*SZ,0.0,0.40))
-        crown_r=r0-0.6; crownc=cxh+cdx*SZ
+        # per-style: (strands across width, groove depth, outward fan, part x-offset)
+        # strands run VERTICALLY (phase from column), fanning slightly outward toward
+        # the bottom — never radiating from the crown, so no pinwheel.
+        SP={'spiky':(5.0,0.30,1.3,0.0),'wild':(4.6,0.30,1.5,0.0),'long':(4.0,0.20,0.4,0.0),
+            'wavy':(3.8,0.22,0.7,0.0),'sidepart':(3.4,0.22,0.6,-2.4),'short':(3.4,0.20,0.6,0.0)}
+        nstr,gdepth,fan,cdx=SP.get(style,(3.4,0.22,0.6,0.0))
+        partc=cxh+cdx*SZ
+        def strand(r,c):                         # vertical strand phase, gently fanned outward
+            nx=(c-cxh)/rx; tt=(r-r0)/max(1,(r1-r0))
+            return ((c-partc)/rx)*nstr + nx*fan*tt
         for (r,c) in head:
             nx=(c-cxh)/rx; ny=(r-cyh)/ry
             v=1.0-nx*nx-ny*ny; nz=math.sqrt(v) if v>0 else 0.0
             d=nx*Lx+ny*Ly+nz*Lz                  # round volume (light upper-left-front)
-            ang=math.atan2(r-crown_r, c-crownc)  # locks fan from crown (offset = part side)
-            ridge=math.cos(ang*nlocks)           # +1 lock crest, -1 valley/seam
-            s=(1.0-rw)*d+rw*ridge                # volume modulated by lock ridges
-            g[r][c]=('j' if s>=0.72 else 'h' if s>=0.08 else 'H' if s>=-0.40 else 'x')
+            groove=math.cos(strand(r,c)*math.pi) # +1 strand crest, -1 groove seam
+            s=d-gdepth*(1.0-groove)*0.5          # seams only DARKEN -> grooves, not spokes
+            g[r][c]=('h' if s>=0.04 else 'H' if s>=-0.36 else 'x')
+        # small confined top-of-head shine: a few colored catch-lights on strand crests
+        # in the lit cap only (NOT a full radial fan).
+        for (r,c) in head:
+            nx=(c-cxh)/rx; ny=(r-cyh)/ry
+            v=1.0-nx*nx-ny*ny; nz=math.sqrt(v) if v>0 else 0.0
+            d=nx*Lx+ny*Ly+nz*Lz
+            groove=math.cos(strand(r,c)*math.pi)
+            if d>=0.62 and groove>=0.62 and g[r][c]=='h': g[r][c]='j'
         # fringe tips that meet the face catch light — lift them out of deep shadow
         # so the hairline doesn't read as a hard dark stripe across the forehead.
         SKIN=set('sdDL')
@@ -178,14 +190,18 @@ def shade_hair(g, style='bob'):
             if 10*SZ<=r<=14*SZ and g[r][c]=='x': g[r][c]='H'
             if 10*SZ<=r<=14*SZ and g[r][c]=='H': g[r][c]='h'
     drape=[(r,c) for r in range(min(HEADH,rows),rows) for c in range(W) if g[r][c]=='h']
-    if drape:                                    # over-shoulder locks: top-lit + vertical ridges
+    if drape:                                    # over-shoulder hair: top-lit, vertical strands
         rr=[r for r,_ in drape]; cc=[c for _,c in drape]
-        r0=min(rr); r1=max(rr); cxd=(min(cc)+max(cc))/2.0
+        r0=min(rr); r1=max(rr); cxd=(min(cc)+max(cc))/2.0; wd=max(1.0,(max(cc)-min(cc))/2.0)
         for (r,c) in drape:
+            tt=(r-r0)/max(1,(r1-r0))             # 0 top of drape .. 1 tip
+            groove=math.cos(((c-cxd)/wd)*3.2*math.pi)
+            s=(0.5-tt*0.9)-0.22*(1.0-groove)*0.5 # top-lit fall + darkening grooves
+            g[r][c]=('h' if s>=-0.02 else 'H' if s>=-0.5 else 'x')
+        for (r,c) in drape:                      # sparse colored catch-lights near the top
             tt=(r-r0)/max(1,(r1-r0))
-            ridge=math.cos(((c-cxd)/(2.4*SZ))*math.pi)
-            s=(0.62-tt*1.1)+0.34*ridge
-            g[r][c]=('j' if s>=0.66 else 'h' if s>=-0.02 else 'H' if s>=-0.55 else 'x')
+            groove=math.cos(((c-cxd)/wd)*3.2*math.pi)
+            if tt<0.42 and groove>=0.6 and g[r][c]=='h': g[r][c]='j'
 
 def shade_body(g):
     """Cel-shade the torso ('b' shirt cells) as a rounded volume lit from the

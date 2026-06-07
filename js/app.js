@@ -1596,7 +1596,7 @@ const SPRITES_WRITER2 = {
 const agents = {
   manager: {
     name: 'Manager', color: C.managerIndigo, home: 'boss',
-    hairColor: '#1a1a2e', skinColor: '#c68642', sprites: SPRITES_MANAGER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#1a1a2e', skinColor: '#c68642', sprites: SPRITES_MANAGER2, spriteScale: 1, _lastDY: 1, photoDir: 'Manager',
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 315, y: 268 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1608,7 +1608,7 @@ const agents = {
   },
   jamesmie: {
     name: 'Jamesmie', color: C.jamesGold, home: 'boss',
-    hairColor: '#1a0a00', skinColor: '#f5d5a0', sprites: SPRITES_JAMESMIE2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#1a0a00', skinColor: '#f5d5a0', sprites: SPRITES_JAMESMIE2, spriteScale: 1, _lastDY: 1, photoDir: 'Jamesmie',
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 100, y: 320 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1620,7 +1620,7 @@ const agents = {
   },
   reader: {
     name: 'Reader', color: C.readerBlue, home: 'dev',
-    hairColor: '#8b4513', skinColor: '#ffe0bd', sprites: SPRITES_READER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#8b4513', skinColor: '#ffe0bd', sprites: SPRITES_READER2, spriteScale: 1, _lastDY: 1, photoDir: 'Reader',
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 350, y: 300 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1632,7 +1632,7 @@ const agents = {
   },
   coder: {
     name: 'Editor', color: C.coderGreen, home: 'ops',
-    hairColor: '#1a237e', skinColor: '#8d5524', sprites: SPRITES_CODER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#1a237e', skinColor: '#8d5524', sprites: SPRITES_CODER2, spriteScale: 1, _lastDY: 1, photoDir: 'Editor',
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 110, y: 470 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1644,7 +1644,7 @@ const agents = {
   },
   searcher: {
     name: 'Searcher', color: C.searchOrange, home: 'dev',
-    hairColor: '#6b0f1a', skinColor: '#e0ac69', sprites: SPRITES_SEARCHER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#6b0f1a', skinColor: '#e0ac69', sprites: SPRITES_SEARCHER2, spriteScale: 1, _lastDY: 1, photoDir: 'Searcher',
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 500, y: 340 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1656,7 +1656,7 @@ const agents = {
   },
   writer: {
     name: 'Writer', color: C.writerTeal, home: 'dev',
-    hairColor: '#0f3a35', skinColor: '#d9b38c', sprites: SPRITES_WRITER2, spriteScale: 1, _lastDY: 1,
+    hairColor: '#0f3a35', skinColor: '#d9b38c', sprites: SPRITES_WRITER2, spriteScale: 1, _lastDY: 1, photoDir: 'Writer',
     _chatPhrase: '', _chatMidX: 0, _waypoint: null,
     pos: { x: 600, y: 250 }, targetPos: null,
     speed: 85, state: 'idle_wander',
@@ -1881,6 +1881,193 @@ const drawFlowBubble = (agent, text, accent) => {
   ctx.restore();
 };
 
+// ============================================================
+// REAL-IMAGE SPRITES: any agent with a `photoDir` draws reference PNGs
+// (assets/<photoDir>/front.png + back.png) instead of its procedural sprite.
+// Each image is processed ONCE on load — drop the transparent background (edge
+// flood-fill), keep the largest CONNECTED blob after a small dilation (so sketchy
+// line-art hair / a crown merge in rather than fragmenting away), trim the source's
+// baked-in drop shadow, then crop to the content box so the sprite anchors at the
+// feet. The scene then adds one clean contact shadow.
+// Result is cached on the agent as `agent.photo = {front, back, aspect}`.
+// Pure vanilla canvas; no deps. Falls back to the procedural sprite if the
+// files are missing or the canvas is tainted (file:// — run via start.ps1).
+// To add a character: drop the two PNGs in assets/<Name>/ and give that agent
+// a matching `photoDir` in the roster — no other code change needed.
+// ============================================================
+
+// Separable Chebyshev max-filter = binary dilation by r (grows a 0/1 mask outward).
+const _dilateMask = (m, w, h, r) => {
+  const a = new Uint8Array(w * h), b = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      let v = 0;
+      for (let dx = -r; dx <= r && !v; dx++) { const xx = x + dx; if (xx >= 0 && xx < w && m[row + xx]) v = 1; }
+      a[row + x] = v;
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let v = 0;
+      for (let dy = -r; dy <= r && !v; dy++) { const yy = y + dy; if (yy >= 0 && yy < h && a[yy * w + x]) v = 1; }
+      b[y * w + x] = v;
+    }
+  }
+  return b;
+};
+// Binary erosion by r = invert → dilate → invert (shrinks a mask inward).
+const _erodeMask = (m, w, h, r) => {
+  const inv = new Uint8Array(w * h);
+  for (let i = 0; i < inv.length; i++) inv[i] = m[i] ? 0 : 1;
+  const d = _dilateMask(inv, w, h, r);
+  for (let i = 0; i < d.length; i++) d[i] = d[i] ? 0 : 1;
+  return d;
+};
+
+const _processSprite = (img) => {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+  const c = oc.getContext('2d', { willReadFrequently: true });
+  c.drawImage(img, 0, 0);
+  let d;
+  try { d = c.getImageData(0, 0, w, h); } catch (e) { return null; }
+  const p = d.data, N = w * h;
+  // Backgrounds are exported transparent, so alpha alone identifies them. (The old
+  // rgb>=230 "white background" rule wrongly ate light/white hair, which is line-art
+  // drawn as sparse strokes over transparency — so it's gone.)
+  const isBG = i => p[i * 4 + 3] < 16;
+  // edge flood-fill: clear near-white background
+  const seen = new Uint8Array(N), st = [];
+  for (let x = 0; x < w; x++) { st.push(x, (h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { st.push(y * w, y * w + w - 1); }
+  while (st.length) {
+    const i = st.pop(); if (seen[i]) continue; seen[i] = 1;
+    if (!isBG(i)) continue; p[i * 4 + 3] = 0;
+    const x = i % w, y = (i / w) | 0;
+    if (x > 0) st.push(i - 1); if (x < w - 1) st.push(i + 1);
+    if (y > 0) st.push(i - w); if (y < h - 1) st.push(i + w);
+  }
+  // Keep the largest CONNECTED region, but first DILATE the opaque mask so that
+  // sketchy line-art hair (thin strands separated by transparent gaps) and small
+  // attached bits (e.g. a crown just above the head) bridge into the body's blob
+  // instead of fragmenting into tiny components that get discarded. Labelling the
+  // raw mask amputated all of that; truly detached marks farther than the bridge
+  // distance (~6px) are still dropped.
+  const op = new Uint8Array(N);
+  for (let i = 0; i < N; i++) op[i] = p[i * 4 + 3] >= 16 ? 1 : 0;
+  const dil = _dilateMask(op, w, h, 3);   // bridge gaps up to ~6px before labelling
+  const lab = new Int32Array(N).fill(-1); let best = -1, bestN = 0, comp = 0;
+  for (let s = 0; s < N; s++) {
+    if (dil[s] && lab[s] === -1) {
+      const id = comp++; let n = 0; const q = [s]; lab[s] = id;
+      while (q.length) {
+        const i = q.pop(); n++; const x = i % w, y = (i / w) | 0;
+        if (x > 0 && lab[i - 1] === -1 && dil[i - 1]) { lab[i - 1] = id; q.push(i - 1); }
+        if (x < w - 1 && lab[i + 1] === -1 && dil[i + 1]) { lab[i + 1] = id; q.push(i + 1); }
+        if (y > 0 && lab[i - w] === -1 && dil[i - w]) { lab[i - w] = id; q.push(i - w); }
+        if (y < h - 1 && lab[i + w] === -1 && dil[i + w]) { lab[i + w] = id; q.push(i + w); }
+      }
+      if (n > bestN) { bestN = n; best = id; }
+    }
+  }
+  for (let i = 0; i < N; i++) if (lab[i] !== best) p[i * 4 + 3] = 0;
+
+  // SOLIDIFY sparse line-art hair so a bright monitor behind a seated agent can't
+  // shine THROUGH the hair. The source draws hair/caps as thin strokes with gaps;
+  // shrunk to sprite size those gaps stay transparent and the screen bleeds through
+  // (invisible over a dark wall, obvious over a lit screen — it reads as "cut").
+  // Fix: CLOSE the silhouette (seal the thin sky-channels between strokes; dilate→
+  // erode keeps the OUTER outline, so faces/limbs don't fatten and the leg gap stays
+  // open), HOLE-FILL every region the close now encloses (any size — big interior
+  // gaps included; spike-gaps still open to the sky are left alone), flood those with
+  // the nearest real colour, then make the whole figure FULLY OPAQUE (no bleed).
+  const CR = 4;
+  const solid = new Uint8Array(N);
+  for (let i = 0; i < N; i++) solid[i] = p[i * 4 + 3] >= 16 ? 1 : 0;
+  const closed = _erodeMask(_dilateMask(solid, w, h, CR), w, h, CR);
+  // Flood "outside" from the border through non-closed pixels; the figure (body +
+  // enclosed holes) is everything the flood can't reach.
+  const outside = new Uint8Array(N); const ost = [];
+  const seedOut = i => { if (!closed[i] && !outside[i]) { outside[i] = 1; ost.push(i); } };
+  for (let x = 0; x < w; x++) { seedOut(x); seedOut((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { seedOut(y * w); seedOut(y * w + w - 1); }
+  while (ost.length) {
+    const i = ost.pop(), x = i % w, y = (i / w) | 0;
+    if (x > 0) seedOut(i - 1); if (x < w - 1) seedOut(i + 1);
+    if (y > 0) seedOut(i - w); if (y < h - 1) seedOut(i + w);
+  }
+  // Grassfire the nearest real colour into the filled (figure ∧ transparent) pixels.
+  const done = new Uint8Array(N); done.set(solid);
+  const isFill = j => !outside[j] && !solid[j];       // a figure pixel that needs colour
+  const fillQ = [];
+  for (let i = 0; i < N; i++) {
+    if (!solid[i]) continue;
+    const x = i % w, y = (i / w) | 0;
+    if ((x > 0 && isFill(i - 1)) || (x < w - 1 && isFill(i + 1)) ||
+        (y > 0 && isFill(i - w)) || (y < h - 1 && isFill(i + w))) fillQ.push(i);
+  }
+  for (let head = 0; head < fillQ.length; head++) {
+    const i = fillQ[head], x = i % w, y = (i / w) | 0;
+    const spread = (j) => {
+      if (done[j] || !isFill(j)) return;
+      done[j] = 1;
+      p[j * 4] = p[i * 4]; p[j * 4 + 1] = p[i * 4 + 1]; p[j * 4 + 2] = p[i * 4 + 2];
+      fillQ.push(j);
+    };
+    if (x > 0) spread(i - 1); if (x < w - 1) spread(i + 1);
+    if (y > 0) spread(i - w); if (y < h - 1) spread(i + w);
+  }
+  for (let i = 0; i < N; i++) p[i * 4 + 3] = outside[i] ? 0 : 255;   // figure → fully opaque
+  // trim the baked drop shadow: per column, clear the bottom-most opaque run if
+  // it's too short to be a leg/shoe (= the thin shadow wing sticking out sideways)
+  const minrun = Math.max(10, Math.round(h * 0.04));
+  for (let x = 0; x < w; x++) {
+    let yb = -1; for (let y = h - 1; y >= 0; y--) { if (p[(y * w + x) * 4 + 3] >= 40) { yb = y; break; } }
+    if (yb < 0) continue;
+    let run = 0, y = yb; while (y >= 0 && p[(y * w + x) * 4 + 3] >= 40) { run++; y--; }
+    if (run < minrun) for (let yy = yb - run + 1; yy <= yb; yy++) p[(yy * w + x) * 4 + 3] = 0;
+  }
+  c.putImageData(d, 0, 0);
+  // crop to the opaque content box so the sprite anchors at the feet (no margin float)
+  let minx = w, miny = h, maxx = -1, maxy = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (p[(y * w + x) * 4 + 3] >= 40) {
+      if (x < minx) minx = x; if (x > maxx) maxx = x;
+      if (y < miny) miny = y; if (y > maxy) maxy = y;
+    }
+  }
+  if (maxx < 0) return null;
+  const cw = maxx - minx + 1, ch = maxy - miny + 1;
+  const crop = document.createElement('canvas'); crop.width = cw; crop.height = ch;
+  crop.getContext('2d').drawImage(oc, minx, miny, cw, ch, 0, 0, cw, ch);
+  return crop;
+};
+
+const _loadImg = src => new Promise((res, rej) => {
+  const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(src); i.src = src;
+});
+
+const loadPhotoSprites = () => {
+  Object.values(agents).filter(a => a.photoDir).forEach(agent => {
+    Promise.all([_loadImg(`assets/${agent.photoDir}/front.png`),
+                 _loadImg(`assets/${agent.photoDir}/back.png`)])
+      .then(([f, b]) => {
+        const F = _processSprite(f), B = _processSprite(b);
+        if (F && B) agent.photo = {
+          front: F, back: B,
+          // Lock ONE shared on-screen aspect (mean of front & back) so the agent keeps
+          // the same width whichever way it faces. The source PNGs are often drawn at
+          // slightly different proportions; without this the body visibly "puffs up"
+          // when turning around. Height still tracks the procedural grid, so it stays
+          // the peers' height.
+          aspect: ((F.width / F.height) + (B.width / B.height)) / 2,
+        };
+      })
+      .catch(() => {});   // missing files / tainted canvas → keep the procedural sprite
+  });
+};
+
 const drawAgent = (agent) => {
   // Seated = working, or in a flow phase past the walk to the desk.
   // While walking_desk the agent should still face its travel direction and animate.
@@ -1906,15 +2093,26 @@ const drawAgent = (agent) => {
   // Dimensions come from the chosen grid + per-sprite scale, so sprites of
   // different resolutions (e.g. high-res 24-wide at scale 2) render correctly.
   const sc = agent.spriteScale || S;
-  const sprW = grid[0].length * sc;
-  const sprH = grid.length * sc;
+  // Agents with a processed photo draw the real PNG once it's ready; the height
+  // matches the procedural sprite so they sit at the same scale as everyone else.
+  const photo = agent.photo;
+  const photoCanvas = photo ? (facing === 'up' ? photo.back : photo.front) : null;
+  let sprW = grid[0].length * sc;
+  let sprH = grid.length * sc;
+  if (photoCanvas) sprW = Math.round(sprH * photo.aspect);
   agent._sprH = sprH;
   const x = Math.round(agent.pos.x - sprW / 2);
   const y = Math.round(agent.pos.y - sprH);
   // Body bob while walking — the sprite hops a couple px per step so the gait
   // reads lively instead of stiff. The name label below stays anchored.
-  const bob = (agent._moving && !seated)
-    ? Math.round(Math.abs(Math.sin(agent._walkPhase || 0)) * 2.5) : 0;
+  // Procedural pixel sprites keep a crisp integer hop (sub-pixel would blur them);
+  // photo sprites have no leg frames, so they get a smooth raised-cosine bounce
+  // (no cusp on footfall) + a side-to-side rock below, to read as a real gait.
+  const walkP = agent._walkPhase || 0;
+  const walking = agent._moving && !seated;
+  const bob = !walking ? 0
+    : photoCanvas ? ((1 - Math.cos(walkP * 2)) / 2) * 3.5
+    : Math.round(Math.abs(Math.sin(walkP)) * 2.5);
 
   // Floor contact shadow grounds the character (skip when seated — feet are under the desk).
   if (!seated) {
@@ -1932,7 +2130,21 @@ const drawAgent = (agent) => {
     ctx.restore();
   }
 
-  drawSprite(grid, x, y - bob, agent.color, agent.facingLeft, agent.hairColor, agent.skinColor, sc);
+  if (photoCanvas) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    if (walking) {                                 // gentle side-to-side rock keyed to the gait
+      const sway = Math.sin(walkP) * 0.045;        // ~±2.6°, pivots at the feet so the head leads
+      const footY = y + sprH - bob;
+      ctx.translate(agent.pos.x, footY);
+      ctx.rotate(sway);
+      ctx.translate(-agent.pos.x, -footY);
+    }
+    ctx.drawImage(photoCanvas, x, y - bob, sprW, sprH);
+    ctx.restore();
+  } else {
+    drawSprite(grid, x, y - bob, agent.color, agent.facingLeft, agent.hairColor, agent.skinColor, sc);
+  }
 
   const labelFont = '11px "Leelawadee UI","Tahoma",sans-serif';
   ctx.font = labelFont;
@@ -2792,4 +3004,5 @@ const loop = (ts) => {
   requestAnimationFrame(loop);
 };
 
+loadPhotoSprites();    // async — agents with a photoDir swap to their real PNGs once ready
 requestAnimationFrame(ts => { _lastTs = ts; requestAnimationFrame(loop); });

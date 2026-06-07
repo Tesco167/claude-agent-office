@@ -24,11 +24,11 @@ $pids = Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction Silently
 foreach ($p in $pids) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue }
 if ($pids) { Start-Sleep -Milliseconds 500 }
 
-# Start python HTTP server in background
+# Start python HTTP server in background (py/serve.py adds no-cache headers so
+# edits always show on reload — `python -m http.server` lets the browser cache).
 $job = Start-Job -ScriptBlock {
     param($dir)
-    Set-Location $dir
-    python -m http.server 8765
+    python (Join-Path $dir "py\serve.py")
 } -ArgumentList $ScriptDir
 
 Start-Sleep 1

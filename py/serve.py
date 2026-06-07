@@ -21,6 +21,15 @@ os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Under pythonw the std handles can't be written to; silence all logging output.
 sys.stdout = sys.stderr = open(os.devnull, "w")
 
+
+# Dev dashboard: never let the browser cache app.js/css, or edits won't show on
+# reload. Send no-store on every response so each reload re-fetches fresh.
+class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, must-revalidate")
+        super().end_headers()
+
+
 # ThreadingHTTPServer matches `python -m http.server` (allow_reuse_address + threads).
-with http.server.ThreadingHTTPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as httpd:
+with http.server.ThreadingHTTPServer(("", PORT), NoCacheHandler) as httpd:
     httpd.serve_forever()
