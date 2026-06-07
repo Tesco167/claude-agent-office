@@ -50,6 +50,8 @@ py/serve.py              windowless HTTP server (silences logging), run by serve
 start.ps1                dev launcher (interactive, blocks)
 serve.ps1                silent launcher (pythonw, no window) for autostart
 install/uninstall-autostart.ps1   register / remove the AtLogOn task
+assets/                  PNG sprite art: keyed *-topdown.png (desks/chair/sofa/table, loaded by app.js)
+                         + Object/ & Room/ source art (kept for re-cutting) + <photoDir>/front,back.png per agent
 agent-events.json        runtime state at repo root (gitignored)
 .claude/settings.json    permissions + additionalDirectories
 docs/superpowers/        specs + plans (see §5)
@@ -71,6 +73,8 @@ Data flow: `Claude Code hooks → py/log-event.py → agent-events.json ← offi
 **`agent-events.json`** keys: `current` (active worker) · `last_completed` (done-flash) · `events` (rolling last-10 feed, `{agent,label,detail,ts}`) · `user_message` (Jamesmie speaks) · `writer_message` (Writer narrates) · `assistant_response` (Manager reports summary).
 
 **`js/app.js`** — canvas `requestAnimationFrame` loop. Top→bottom: palette `C` + geometry (`ROOMS`, desks) → furniture/decor → pixel-art sprite system → `agents` roster → state machine + pathfinder + `loop` → **bottom:** `$.getJSON` seed, `setInterval(fetchEvents, 500)`, `requestAnimationFrame(loop)`. **Keep init calls at the bottom.** On initial seed the poller records the latest timestamps as a baseline so the backlog doesn't replay on load; afterward it only reacts to fresher events.
+
+**Image assets (PNG sprites).** Desks/chair/sofa/table are keyed top-down PNGs (`assets/*-topdown.png`) drawn aspect-preserved via `drawSpriteShadowed(...)`, **each guarded by `IMG.complete && IMG.naturalWidth` with a procedural fallback** — so the procedural desk/furniture code is *not* dead, it's the not-yet-loaded path. Characters: any agent with a `photoDir` gets `assets/<photoDir>/front.png`+`back.png` async-loaded by `loadPhotoSprites()` (bottom init), swapping from procedural `SPRITES_*2` once both resolve. Add a character = drop the two PNGs in `assets/<Name>/` + set `photoDir`.
 
 **Roster (6 agents)** — in the `agents` object; each has a `home` room (`boss`/`dev`/`ops`), color, sprites, state slot. Tool→agent map is `TOOL_TO_AGENT` (py).
 
@@ -98,6 +102,7 @@ Data flow: `Claude Code hooks → py/log-event.py → agent-events.json ← offi
 - **jQuery = DOM/ajax only** (3 spots: canvas select, seed, poll). Don't grow it. Canvas is pure vanilla 2D.
 - ⚠️ **`const` name collisions** (e.g. duplicate sprite arrays) throw a `SyntaxError` that **silently blanks the whole page** — verify it renders after adding sprites.
 - ⚠️ **Sprite grids must be exact width** — an off-by-one row corrupts the character.
+- ⚠️ **Almost nothing here is truly "dead code."** Sprite grids are used via **spread** (`[...JAMESMIE_BD, ...LEGS_CUTE_STAND]`) and PNG desks fall back to procedural draws — so "unused identifier" scans false-flag live constants (a ref-counter regex that ignores a leading `.` also hides `...spread`). Deleting a spread-only const → `ReferenceError` → **blank page**. Verify against spread + fallback paths before removing.
 - Keep edits small; it's one ~2700-line module.
 
 **Planning** (`docs/superpowers/`): substantial changes (new agent, flow, redesign) get a spec (`specs/YYYY-MM-DD-<topic>-design.md`) and plan (`plans/YYYY-MM-DD-<topic>.md`) **first** — skills `brainstorming` → `writing-plans` → `executing-plans`. Small fixes don't.
@@ -107,11 +112,15 @@ Data flow: `Claude Code hooks → py/log-event.py → agent-events.json ← offi
 ## 6. Visual workflow (REQUIRED for new sprites/furniture)
 
 `node` isn't installed, so the canvas can't be inspected headlessly — **render a preview PNG and look at it before integrating.** Pixel-art errors (proportions, merged colors, off-by-one grids) are invisible in code.
-1. Build the grid in a throwaway Python script.
+1. Build the grid in a throwaway Python script. ⚠️ On this Windows box the Bash tool **mangles `python <<'PY'` here-docs** (backticks + regex char-classes get corrupted → `PatternError`) — write the script to a temp `.py` file and run `python file.py`, then delete it.
 2. Render to PNG with the pure-stdlib encoder (`zlib` + `struct`, no PIL/Node), same color map / `shadeHex` / scale as the real code.
 3. **Read the PNG**, iterate until right.
 4. Port validated grids into `js/app.js` (via a temp file, to avoid transcription errors).
 5. **Delete `__*.png` / `__*_gen.txt` before committing.**
+
+⚠️ **`.gitignore` only auto-ignores `__pycache__/`, `__*.png`, `__*_gen.txt` — NOT `__*.py`.** Throwaway probe/verify/analyzer scripts (`__*.py`) show up as untracked and must be deleted by hand; running them also leaves orphaned bytecode in `__pycache__/` (clean with `rm -rf __pycache__/`).
+
+**Keying source art → transparent sprite.** The `assets/*-topdown.png` sprites are cut from hand-drawn source art (`assets/Object/...`) by keying the background to transparency via **edge flood-fill** — flood from the image borders inward. ⚠️ **Do NOT use a global hue/color-key:** the background tint also appears *inside* the art (dark monitor bezels, chair shadow, wood grain), so a color-key punches holes in the sprite; flood-fill only removes the contiguous outer region and preserves interior pixels. Probe the corner color + tolerance first (that's what the `__probe_*.py` scratch scripts were for). Same convention for every desk/chair/sofa/table. **Keep the source under `assets/Object/`** so the sprite can be re-cut; output is loaded aspect-preserved + drawn through `drawSpriteShadowed` (see §4).
 
 ---
 
@@ -154,28 +163,10 @@ Wire tool calls into the viz. Use the **absolute** path to `py/log-event.py` (re
 
 ---
 
-## 10. Art direction — target visual style
+## 10. Art direction — north star
 
-The look we're building toward: **a high-detail isometric pixel-art IT office** inspired by modern software companies. Use this as the north star when designing rooms, props, lighting, and sprites (render-and-view per §6).
+Target: **a high-detail, top-down 3/4 isometric pixel-art IT office** — premium handcrafted, cozy cyber-tech, warm ambient light with subtle neon accents, professional indie-game quality; a software company that feels alive and organized. Use when designing rooms/props/lighting/sprites (render-and-view per §6).
 
-**Style:**
-- Premium handcrafted pixel art
-- Top-down 3/4 isometric perspective
-- Cozy cyber-tech atmosphere
-- Rich environmental storytelling
-- Warm ambient lighting with subtle neon accents
-- Professional indie-game quality
+**Want to see:** neon signage · server rack · multiple workstations · warm interior · detailed props · modular, story-rich rooms.
 
-**Mood:** a productive software company office that feels alive, cozy, and highly organized.
-
-**Visual elements to include:**
-- Neon signage
-- Server rack
-- Multiple workstations
-- Ambient lighting
-- Warm interior
-- Detailed props
-- Modular rooms
-- Story-rich environment
-
-**Game references:** Game Dev Tycoon · Software Inc · Project Highrise · The Red Strings Club · Dave the Diver (environment style) · pixel-art tycoon games.
+**Refs:** Game Dev Tycoon · Software Inc · Project Highrise · The Red Strings Club · Dave the Diver · pixel-art tycoon games.
