@@ -151,3 +151,31 @@ Wire tool calls into the viz. Use the **absolute** path to `py/log-event.py` (re
 - [ ] No build tool/framework added; jQuery footprint unchanged
 - [ ] `agent-events.json` / `__*` not staged
 - [ ] Commit message is conventional-commit format
+
+---
+
+## 10. Art direction — target visual style
+
+The look we're building toward: **a high-detail isometric pixel-art IT office** inspired by modern software companies. Use this as the north star when designing rooms, props, lighting, and sprites (render-and-view per §6).
+
+**Style:**
+- Premium handcrafted pixel art
+- Top-down 3/4 isometric perspective
+- Cozy cyber-tech atmosphere
+- Rich environmental storytelling
+- Warm ambient lighting with subtle neon accents
+- Professional indie-game quality
+
+**Mood:** a productive software company office that feels alive, cozy, and highly organized.
+
+**Visual elements to include:**
+- Neon signage
+- Server rack
+- Multiple workstations
+- Ambient lighting
+- Warm interior
+- Detailed props
+- Modular rooms
+- Story-rich environment
+
+**Game references:** Game Dev Tycoon · Software Inc · Project Highrise · The Red Strings Club · Dave the Diver (environment style) · pixel-art tycoon games.

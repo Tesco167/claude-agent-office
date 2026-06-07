@@ -5,7 +5,10 @@ const W = 900, H = 560;
 const S = 3; // pixel art scale: 1 unit = S canvas px
 
 const canvas = $('#office')[0];
-const ctx    = canvas.getContext('2d');
+// alpha:false → opaque canvas: the browser skips per-pixel alpha compositing with the
+// page behind it (the scene fills the canvas opaquely anyway). `let`: temporarily
+// redirected to the offscreen scene cache during buildSceneCache().
+let   ctx    = canvas.getContext('2d', { alpha: false });
 
 const DPR = window.devicePixelRatio || 1;
 // Canvas is sized after HEADER_H is known (see ROOM LAYOUT) — the header strip is
@@ -28,7 +31,10 @@ const C = {
   sofaBlue:     '#2d3561',
   sofaDark:     '#1e2449',
   coffeeM:      '#2d2d2d',
-  rugWarm:      '#3d2a1a',
+  rugWarm:      '#3d2a1a',   // lounge (warm brown)
+  rugBoss:      '#4a2536',   // boss   (executive burgundy)
+  rugDev:       '#1d3d40',   // dev    (cool teal)
+  rugOps:       '#2d3320',   // ops    (command olive)
   plantDark:    '#1a3a1a',
   plantLight:   '#2d6b2d',
   serverRack:   '#1a1a2a',
@@ -78,21 +84,39 @@ const WALL = 8;
 const DOOR_W = 28;
 
 const WORK_POS = {
-  jamesmie: { x: 100, y: 165 },  // in front of boss desk (desk front at y=155)
+  jamesmie: { x: 100, y: 182 },  // in front of boss desk (desk-sprite front at y=175)
   reader:   { x: 535, y: 158 },  // in front of reader desk (desk front at y=150)
-  coder:    { x: 130, y: 410 },  // in front of ops desk (Editor, shifted right)
+  coder:    { x: 138, y: 428 },  // in front of ops desk (Editor station PNG)
   searcher: { x: 700, y: 158 },  // in front of dev (mid) desk (swapped with Coder)
 };
 // "In-chair" point behind each desk: agent walks here to sit and work.
 // "In-chair" point — centered on each desk's MONITOR so agent, chair, and
 // screen line up. Agent faces up (back to viewer) here, overlapping the screen.
 const SIT_POS = {
-  manager:  { x: 315, y: 138 },  // monitor 297..333 (top-wall workstation, desk 90..140)
-  jamesmie: { x: 74,  y: 150 },  // monitor 57..91
+  manager:  { x: 315, y: 140 },  // at desk front (sprite desk 78..150); baked monitor ~312,104
+  jamesmie: { x: 76,  y: 154 },  // desk-sprite monitor ~57..93 (centre x76)
   reader:   { x: 510, y: 148 },  // monitor 492..528
-  coder:    { x: 115, y: 400 },  // ops desk (Editor, shifted right) — monitor 97..133
+  coder:    { x: 123, y: 405 },  // ops Editor station PNG — chair seat center
   searcher: { x: 680, y: 148 },  // dev mid desk (swapped with Coder) — monitor 662..698
   writer:   { x: 803, y: 148 },  // monitor 785..821
+};
+
+// Front "access lane" for each chair: a clear-floor point directly in front of
+// the seat (same x), just past the desk's nav footprint. Agents step straight
+// in/out through here so they never slide diagonally across the desk — i.e.
+// "enter/leave the chair from the front, don't walk through the desk."
+const SEAT_APPROACH = {
+  // Directly in front of each seat (same x), on clear floor past the desk — so the
+  // step in/out is straight, never a diagonal across the desk. EXCEPTION: the
+  // Manager's chair is a big sprite poking out the desk front, so a straight-up
+  // approach walks through it; he enters/leaves from the LEFT of the chair instead
+  // (clear floor past the chair's left edge ~x294).
+  manager:  { x: 360, y: 148 },
+  jamesmie: { x: 76,  y: 185 },
+  reader:   { x: 510, y: 165 },
+  coder:    { x: 180, y: 430 },  // clear floor directly in front of editor station
+  searcher: { x: 680, y: 165 },
+  writer:   { x: 803, y: 165 },
 };
 
 // After finishing work, agents stay seated this long before wandering off —
@@ -105,8 +129,8 @@ const QUEUE_SPOTS = {
     { x: 855, y: 415 },  // slot 2 — second in line
   ],
   sofa: [
-    { x: 645, y: 442 },  // slot 0 — left seat (centered sofa)
-    { x: 705, y: 442 },  // slot 1 — right seat
+    { x: 645, y: 412 },  // slot 0 — left seat (centered sofa)
+    { x: 705, y: 412 },  // slot 1 — right seat
   ],
 };
 const queues = { coffee: [], sofa: [] };  // arrays of agent keys; index = slot
@@ -143,12 +167,12 @@ const WALK = { x: 15, y: 55, maxX: 885, maxY: 545 };
 const NAV_OBSTACLES = [
   // ── BOSS ──
   { x: 260, y: 52,  w: 120, h: 20 },   // bookshelf (top wall ledge)
-  { x: 25,  y: 100, w: 150, h: 55 },   // Jamesmie / boss desk
+  { x: 25,  y: 100, w: 150, h: 75 },   // Jamesmie / boss desk (sprite is ~75 tall)
   { x: 410, y: 52,  w: 20,  h: 20 },   // corner plant
-  { x: 30,  y: 235, w: 90,  h: 30 },   // guest sofa
-  { x: 50,  y: 272, w: 50,  h: 18 },   // coffee table
+  { x: 30,  y: 205, w: 90,  h: 30 },   // guest sofa
+  { x: 50,  y: 242, w: 50,  h: 18 },   // coffee table
   { x: 195, y: 135, w: 30,  h: 60 },   // cabinet
-  { x: 250, y: 90,  w: 130, h: 50 },   // manager desk (top wall)
+  { x: 250, y: 78,  w: 130, h: 72 },   // manager desk (top wall, hand-drawn sprite)
   // ── DEV ──
   { x: 480, y: 100, w: 95,  h: 50 },   // reader desk
   { x: 650, y: 100, w: 95,  h: 50 },   // dev mid desk (Searcher, swapped)
@@ -157,11 +181,11 @@ const NAV_OBSTACLES = [
   { x: 858, y: 260, w: 26,  h: 30 },   // fridge
   { x: 480, y: 260, w: 48,  h: 24 },   // crates
   // ── OPS ──
-  { x: 85,  y: 355, w: 95,  h: 50 },   // ops desk (Editor, shifted right)
+  { x: 55,  y: 330, w: 165, h: 60 },   // ops Editor station (desk + monitors + PC; chair seat left open below)
   { x: 405, y: 318, w: 28,  h: 120 },  // server racks (stacked)
   // ── LOUNGE ──
-  { x: 615, y: 400, w: 120, h: 38 },   // sofa
-  { x: 648, y: 450, w: 55,  h: 30 },   // coffee table
+  { x: 615, y: 370, w: 120, h: 38 },   // sofa
+  { x: 635, y: 437, w: 80,  h: 35 },   // lounge table
   { x: 855, y: 318, w: 28,  h: 28 },   // coffee machine
   { x: 464, y: 360, w: 24,  h: 110 },  // bookshelf
   { x: 466, y: 316, w: 20,  h: 20 },   // plant
@@ -174,7 +198,6 @@ const NAV_OBSTACLES = [
   { x: 458, y: 196, w: 28,  h: 52 },   // filing cabinet
   { x: 820, y: 178, w: 20,  h: 20 },   // plant
   // ops
-  { x: 40,  y: 330, w: 30,  h: 58 },   // cabinet
   { x: 20,  y: 488, w: 28,  h: 55 },   // server bank (bottom-left)
   { x: 51,  y: 488, w: 28,  h: 55 },   // server bank
   { x: 82,  y: 488, w: 28,  h: 55 },   // server bank
@@ -364,10 +387,31 @@ const drawText = (str, x, y, opts = {}) => {
 
 // grounded contact shadow under an object — soft penumbra + darker core, offset down-right
 // (opposite the top-left key light) so pieces sit on the floor instead of floating.
+// Soft grounded shadow for a footprint box — a blurred, offset dark rect that grounds
+// every procedural object (desks, chairs, plants, crates, cabinets, racks…) the same
+// soft way as the sprite shadows (drawSpriteShadowed). ctx.filter blurs only this fill
+// (not the canvas beneath it), so it feathers out instead of stamping the old hard
+// double-rect. One function → whole project. Darkness/blur tunable here; keep roughly
+// in step with drawSpriteShadowed's shadowColor so sprites + procedural objects match.
 const shadow = (x, y, w, h) => {
   ctx.save();
-  rect(x + 3, y + 6, w, h, 'rgba(0,0,0,0.36)');
-  rect(x + 4, y + 7, w - 2, h - 2, 'rgba(0,0,0,0.42)');
+  ctx.filter = 'blur(7px)';
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  ctx.fillRect(x + 2, y + 5, w, h);
+  ctx.restore();
+};
+
+// Soft drop shadow for keyed sprites: canvas shadowBlur follows the image's alpha,
+// so the shadow hugs the silhouette and feathers out — grounded, not the hard
+// offset rectangle shadow() stamps (which shows badly once a sprite's background is
+// keyed to transparency). Use for the pre-rendered furniture PNGs.
+const drawSpriteShadowed = (img, x, y, w, dh) => {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.92)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 5;
+  ctx.drawImage(img, x, y, w, dh);
   ctx.restore();
 };
 
@@ -379,11 +423,29 @@ const bevel = (x, y, w, h, light = 'rgba(255,255,255,0.22)', dark = 'rgba(0,0,0,
   rect(x + w - 2, y, 2, h, dark);
 };
 
-// Executive boss desk (Jamesmie) — richer than the plain top-down desk: green
-// leather pad, gold trim/nameplate w/ crown, document tray, desk lamp, monitor.
-// Monitor screen CONTENT (code lines) + keyboard + mug are layered on later by
-// drawDetails(); this draws the furniture + accessories beneath them.
+// Jamesmie's executive desk. Primary path: the hand-made top-down sprite
+// (assets/jamesmie-desk-topdown.png — monitor, yellow keyboard, papers, phone,
+// plant, and a bottom-centre chair-notch all baked in; the purple floor backdrop
+// was keyed out to transparency, edge flood-fill, so only the desk remains — same
+// convention as sofa-topdown.png / table-topdown.png). Source art lives at
+// assets/Object/Computer Desk/Jamesmie/. Drawn aspect-preserved at the requested
+// width (150 → ~75 tall) with a grounded contact shadow; falls back to the
+// procedural desk below until the sprite decodes (or if the file is ever missing).
+const JAMESMIE_DESK_IMG = new Image();
+JAMESMIE_DESK_IMG.src = 'assets/jamesmie-desk-topdown.png';
 const drawBossDesk = (x, y, w, h) => {
+  if (JAMESMIE_DESK_IMG.complete && JAMESMIE_DESK_IMG.naturalWidth) {
+    const dh = Math.round(w * JAMESMIE_DESK_IMG.naturalHeight / JAMESMIE_DESK_IMG.naturalWidth);
+    drawSpriteShadowed(JAMESMIE_DESK_IMG, x, y, w, dh);
+    return;
+  }
+  drawBossDeskProc(x, y, w, h);
+};
+
+// Procedural fallback — richer than the plain top-down desk: green leather pad,
+// gold trim/nameplate w/ crown, document tray, desk lamp, monitor. (Screen content
+// + keyboard + mug were layered on by drawDetails() in the procedural era.)
+const drawBossDeskProc = (x, y, w, h) => {
   const base = '#4a3322';
   shadow(x, y, w, h);
   rect(x, y, w, h, base);
@@ -427,12 +489,92 @@ const drawBossDesk = (x, y, w, h) => {
   rect(cwx, ny + 2, 2, 2, '#ffd700'); rect(cwx + 3, ny + 2, 2, 2, '#ffd700'); rect(cwx + 6, ny + 2, 2, 2, '#ffd700');
 };
 
-// Manager workstation desk — as detailed as the boss desk but a distinct cool
-// "ops manager" theme: graphite surface, brushed-steel trim, indigo felt pad,
-// a desk planner/calendar (he assigns the team), pen cup, a COOL blue task lamp,
-// and a silver nameplate with an indigo badge (no crown — he's not the boss).
-// Monitor screen CONTENT + keyboard + mug are layered on by drawDetails().
+// Manager workstation desk. Primary path: the hand-drawn top-down sprite
+// (assets/manager-desk-topdown.png — graphite surface, task planner, a live monitor,
+// a server-rack patch panel with status LEDs, and a baked keyboard; the purple floor
+// backdrop was keyed out to transparency the same way as jamesmie-desk-topdown.png,
+// source art at assets/Object/Computer Desk/Manager/). Drawn aspect-preserved at the
+// requested width with a grounded contact shadow; falls back to the procedural desk
+// below until the sprite decodes (or if the file is ever missing). The screen glow,
+// mouse and mug are layered on by drawDetails().
+const MANAGER_DESK_IMG = new Image();
+MANAGER_DESK_IMG.src = 'assets/manager-desk-topdown.png';
+
+// Manager's office chair — keyed top-down sprite (assets/manager-chair-topdown.png,
+// extracted from assets/Object/Desk Chair 1.png: the purple floor + desk + brick wall
+// were keyed out — chroma-keyed, since the chair is achromatic against a coloured
+// backdrop — then cropped to the chair). Viewed from behind, so it serves BOTH roles:
+// drawn as furniture it's the empty chair at the desk (over the chair baked into the
+// desk sprite), and when the Manager is seated drawManagerChair(false) redraws it over
+// him as the chair he sits in — his head pokes above the backrest. Both share MGR_CHAIR
+// so the empty and seated chair line up exactly.
+const MANAGER_CHAIR_IMG = new Image();
+MANAGER_CHAIR_IMG.src = 'assets/manager-chair-topdown.png';
+const MGR_CHAIR = { cx: 315, top: 121, w: 42 };   // cx = SIT_POS.manager.x; backrest top ~12px below the seated head (~y109)
+const drawManagerChair = (shadowed) => {
+  const img = MANAGER_CHAIR_IMG;
+  if (!(img.complete && img.naturalWidth)) return;
+  const w = MGR_CHAIR.w, h = Math.round(w * img.naturalHeight / img.naturalWidth);
+  const x = MGR_CHAIR.cx - w / 2, y = MGR_CHAIR.top;
+  if (shadowed) drawSpriteShadowed(img, x, y, w, h);   // furniture: grounded contact shadow (baked into the scene cache)
+  else ctx.drawImage(img, x, y, w, h);                  // seated overlay: no shadow (the furniture copy already grounds it)
+};
+
 const drawManagerDesk = (x, y, w, h) => {
+  if (MANAGER_DESK_IMG.complete && MANAGER_DESK_IMG.naturalWidth) {
+    const dh = Math.round(w * MANAGER_DESK_IMG.naturalHeight / MANAGER_DESK_IMG.naturalWidth);
+    drawSpriteShadowed(MANAGER_DESK_IMG, x, y, w, dh);
+    return;
+  }
+  drawManagerDeskProc(x, y, w, h);
+};
+
+// Editor (coder) station. Primary path: the keyed top-down sprite
+// (assets/editor-desk-topdown.png — triple monitors, RGB keyboard, gaming chair,
+// gaming PC case; background already transparent, source at
+// assets/Object/Computer Desk/Editor/). Drawn aspect-preserved at STATION_W with a
+// grounded contact shadow. Falls back to the procedural gaming desk + monitor +
+// chair until the sprite decodes (or if the file is ever missing). The monitor
+// glow + flowing code is layered live per-frame by a later function, NOT here.
+const EDITOR_DESK_IMG = new Image();
+EDITOR_DESK_IMG.src = 'assets/editor-desk-topdown.png';
+const STATION_X = 55, STATION_Y = 30, STATION_W = 165;   // ops-room-relative top-left + width (tune in verify step)
+const drawEditorDesk = (ox, oy) => {
+  const x = ox + STATION_X, y = oy + STATION_Y;
+  if (EDITOR_DESK_IMG.complete && EDITOR_DESK_IMG.naturalWidth) {
+    const dh = Math.round(STATION_W * EDITOR_DESK_IMG.naturalHeight / EDITOR_DESK_IMG.naturalWidth);
+    drawSpriteShadowed(EDITOR_DESK_IMG, x, y, STATION_W, dh);
+    return;
+  }
+  // procedural fallback — original gaming desk + monitor + chair
+  drawGamingDeskTopDown(ox + 85, oy + 55, 95, 50);
+  drawDeskMonitor(ox + 95, oy + 62, '#001a00');
+  drawGamingChairTopDown(ox + 102, oy + 105, C.deskGaming);
+};
+
+// Seated overlay for the Editor: the gaming chair is baked into editor-desk-topdown.png,
+// so we re-blit JUST its chair sub-rectangle over the seated Editor — the chair back
+// then occludes the body (head/shoulders poke above), the way drawManagerChair covers
+// the Manager. Because it's the SAME sprite redrawn at the SAME screen position, the
+// overlay is pixel-seamless everywhere EXCEPT where it covers the agent — so no
+// chroma-key is needed (the chair is near-black on a near-black floor and can't be
+// keyed cleanly anyway). Source rect tuned via the §6 render-and-view workflow.
+const EDITOR_CHAIR_SRC = { x: 205, y: 215, w: 220, h: 273 };   // chair region within the 739×507 sprite
+const drawEditorChairBack = () => {
+  const img = EDITOR_DESK_IMG;
+  if (!(img.complete && img.naturalWidth)) return;   // fallback path has no baked chair to crop
+  const x0 = ROOMS.ops.x + STATION_X, y0 = ROOMS.ops.y + STATION_Y;
+  const scale = STATION_W / img.naturalWidth;
+  const s = EDITOR_CHAIR_SRC;
+  ctx.drawImage(img, s.x, s.y, s.w, s.h,
+                x0 + s.x * scale, y0 + s.y * scale, s.w * scale, s.h * scale);
+};
+
+// Procedural fallback — distinct cool "ops manager" theme: graphite surface,
+// brushed-steel trim, indigo felt pad, a desk planner/calendar (he assigns the team),
+// pen cup, a COOL blue task lamp, and a silver nameplate with an indigo badge (no
+// crown — he's not the boss). Monitor CONTENT + keyboard + mug layered by drawDetails().
+const drawManagerDeskProc = (x, y, w, h) => {
   const base = '#2c2940';                 // cool graphite (vs boss warm walnut)
   shadow(x, y, w, h);
   rect(x, y, w, h, base);
@@ -450,7 +592,7 @@ const drawManagerDesk = (x, y, w, h) => {
   rect(bx, by, bw, bh, '#1d1d36'); rect(bx + 2, by + 2, bw - 4, bh - 4, '#2a2a52');
   rect(bx + 2, by + 2, bw - 4, 1, 'rgba(255,255,255,0.05)');
   for (const sx of [bx + 1, bx + bw - 3]) for (const sy of [by + 1, by + bh - 3]) rect(sx, sy, 2, 2, '#aeb6cc');
-  // monitor bezel (screen content added by drawDetails at 297,99)
+  // monitor bezel (dark; only the sprite path gets a layered screen glow in drawDetails)
   rect(x + 43, y + 5, 44, 30, '#0c0c12');
   rect(x + 45, y + 7, 40, 26, '#16202e');
   rect(x + 47, y + 9, 36, 22, '#0f2035');
@@ -656,21 +798,80 @@ const drawServerRackTopDown = (x, y) => {
   }
 };
 
+// Lounge / guest sofa. Primary path: a pre-rendered top-down sprite
+// (assets/sofa-topdown.png, wood background keyed out), drawn aspect-preserved at
+// the requested width with a grounded contact shadow. Falls back to the procedural
+// drawing below until the sprite has decoded (or if the file is ever missing).
+const SOFA_IMG = new Image();
+SOFA_IMG.src = 'assets/sofa-topdown.png';
 const drawSofaTopDown = (x, y, w, h) => {
+  if (SOFA_IMG.complete && SOFA_IMG.naturalWidth) {
+    const dh = Math.round(w * SOFA_IMG.naturalHeight / SOFA_IMG.naturalWidth);
+    drawSpriteShadowed(SOFA_IMG, x, y, w, dh);
+    return;
+  }
+  drawSofaProc(x, y, w, h);
+};
+
+// Procedural fallback — top-down plush sofa: a brighter puffy back-cushion band
+// along the top edge, raised armrest bolsters down both sides (drawn last so they
+// read as raised), and quilted seat cushions in between. Parametric so the lounge
+// 3-seater and the boss-room 2-seater both compose without gaps.
+const drawSofaProc = (x, y, w, h) => {
   shadow(x, y, w, h);
-  rect(x, y, w, h, C.sofaBlue);
-  rect(x + 6, y + 6, w - 12, h - 8, C.sofaDark);       // seat area
-  rect(x + 6, y + 6, w - 12, 2, 'rgba(255,255,255,0.10)');  // seat front highlight
-  // cushion seams (2-3 cushions)
-  const n = w > 100 ? 3 : 2;
-  for (let i = 1; i < n; i++) rect(x + 6 + Math.round(i * (w - 12) / n), y + 6, 2, h - 8, 'rgba(0,0,0,0.28)');
-  rect(x, y, w, 6, C.sofaBlue);                        // backrest
-  rect(x, y, w, 2, 'rgba(255,255,255,0.14)');          // backrest top highlight
-  rect(x, y, 6, h, C.sofaDark);                        // arm L
-  rect(x, y, 6, 2, 'rgba(255,255,255,0.10)');
-  rect(x + w - 6, y, 6, h, C.sofaDark);                // arm R
-  rect(x + w - 6, y, 6, 2, 'rgba(255,255,255,0.10)');
-  rect(x, y + h - 2, w, 2, 'rgba(0,0,0,0.30)');        // base shadow
+  const arm  = Math.max(7, Math.round(w * 0.12));   // armrest width
+  const back = Math.max(9, Math.round(h * 0.36));    // back-cushion band depth
+  const base = 3;                                    // bottom skirt
+  const seatX = x + arm, seatW = w - arm * 2;
+  const seatTop = y + back, seatBot = y + h - base, seatH = seatBot - seatTop;
+
+  const cushion  = C.sofaBlue;
+  const hi1 = shadeHex(cushion, 1.45);               // puff top highlight
+  const hi2 = shadeHex(cushion, 1.18);               // edge light
+  const seatFace = shadeHex(cushion, 0.95);          // seat sits in the back's shade
+  const armFace  = shadeHex(cushion, 1.06);          // arms catch a touch more light
+
+  rect(x, y, w, h, C.sofaDark);                      // body / frame
+
+  // seat cushions
+  const sn = w > 100 ? 3 : 2;
+  for (let i = 0; i < sn; i++) {
+    const cx = Math.round(seatX + i * seatW / sn);
+    const cw = Math.round(seatX + (i + 1) * seatW / sn) - cx;
+    rect(cx, seatTop, cw, seatH, seatFace);
+    rect(cx, seatTop, cw, 2, hi2);                   // front-lip highlight
+    rect(cx, seatBot - 2, cw, 2, 'rgba(0,0,0,0.26)'); // shadow toward base
+    if (i > 0) rect(cx, seatTop, 1, seatH, 'rgba(0,0,0,0.30)'); // seam
+  }
+
+  // back cushions (top band)
+  const bn = w > 100 ? 3 : 2;
+  for (let i = 0; i < bn; i++) {
+    const cx = Math.round(seatX + i * seatW / bn);
+    const cw = Math.round(seatX + (i + 1) * seatW / bn) - cx;
+    rect(cx, y + 2, cw, back - 2, cushion);
+    rect(cx, y + 2, cw, 2, hi1);                     // puff top highlight
+    rect(cx, y + 2, 2, back - 2, hi2);               // left edge light
+    rect(cx + cw - 2, y + 2, 2, back - 2, 'rgba(0,0,0,0.28)'); // seam / right shade
+    rect(cx, y + back - 2, cw, 2, 'rgba(0,0,0,0.32)'); // crease where back meets seat
+  }
+
+  // armrests (full depth, drawn last → raised above seat/back)
+  const armTop = y + 2, armH = h - base - 2;
+  rect(x, armTop, arm, armH, armFace);
+  rect(x, armTop, arm, 2, hi1);                      // top puff
+  rect(x, armTop, 2, armH, hi2);                     // outer light
+  rect(x + arm - 2, armTop, 2, armH, 'rgba(0,0,0,0.30)'); // inner shade
+  rect(x + w - arm, armTop, arm, armH, armFace);
+  rect(x + w - arm, armTop, arm, 2, hi1);
+  rect(x + w - 2, armTop, 2, armH, 'rgba(0,0,0,0.34)'); // outer shade
+  rect(x + w - arm, armTop, 2, armH, hi2);           // inner light
+
+  // base skirt + feet
+  rect(x, seatBot, w, base, shadeHex(C.sofaDark, 0.75));
+  rect(x + arm + 1, y + h - 1, 3, 1, '#241a10');
+  rect(x + w - arm - 4, y + h - 1, 3, 1, '#241a10');
+
   bevel(x, y, w, h);
 };
 
@@ -774,13 +975,47 @@ const drawCoffeeTableTopDown = (x, y, w, h) => {
   bevel(x, y, w, h, 'rgba(255,255,255,0.08)', 'rgba(0,0,0,0.30)');
 };
 
-const drawRugTopDown = (x, y, w, h) => {
+// Lounge centre table — pre-rendered sprite (assets/table-topdown.png, cropped to
+// the wooden body + potted plant), drawn aspect-preserved at the requested width
+// with a grounded contact shadow. Falls back to the procedural coffee table until
+// the sprite has decoded (or if the file is ever missing).
+const TABLE_IMG = new Image();
+TABLE_IMG.src = 'assets/table-topdown.png';
+const drawLivingRoomTable = (x, y, w, h) => {
+  if (TABLE_IMG.complete && TABLE_IMG.naturalWidth) {
+    const dh = Math.round(w * TABLE_IMG.naturalHeight / TABLE_IMG.naturalWidth);
+    drawSpriteShadowed(TABLE_IMG, x, y, w, dh);
+    return;
+  }
+  drawCoffeeTableTopDown(x, y, w, h);
+};
+
+// Flat woven floor rug — opaque & patterned, but lies FLAT on the floor (no
+// bevel/shadow, so it reads as a carpet, not a raised table-top).
+const drawRugTopDown = (x, y, w, h, base = C.rugWarm) => {
   ctx.save();
-  ctx.globalAlpha = 0.5;
-  rect(x, y, w, h, C.rugWarm);
-  ctx.strokeStyle = '#5a3f28';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
+  ctx.globalAlpha = 0.9;                                      // solid/opaque (was a washed-out 0.5)
+  rect(x, y, w, h, shadeHex(base, 0.92));                     // border band (only slightly darker — not a rim)
+  const b = Math.max(3, Math.round(Math.min(w, h) * 0.10));   // border thickness scales with size
+  const fx = x + b, fy = y + b, fw = w - 2 * b, fh = h - 2 * b;
+  rect(fx, fy, fw, fh, shadeHex(base, 1.16));                 // inner field (slightly lighter)
+
+  ctx.globalAlpha = 0.07;                                     // faint woven pile stripes
+  for (let yy = fy + 1; yy < fy + fh - 1; yy += 3) rect(fx, yy, fw, 1, '#000');
+  ctx.globalAlpha = 0.9;
+
+  ctx.lineWidth = 1;                                          // flat printed keylines (no 3D bevel)
+  ctx.strokeStyle = shadeHex(base, 1.7);
+  ctx.strokeRect(fx - 1, fy - 1, fw + 2, fh + 2);
+  ctx.strokeStyle = shadeHex(base, 0.72);
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+  ctx.globalAlpha = 0.7;                                      // fringe lying flat on the floor
+  const fr = shadeHex(base, 1.8);
+  for (let xx = x + 3; xx < x + w - 2; xx += 5) {
+    rect(xx, y - 2, 2, 2, fr);
+    rect(xx, y + h, 2, 2, fr);
+  }
   ctx.restore();
 };
 
@@ -889,31 +1124,26 @@ const drawAllRooms = () => {
   ctx.lineWidth = 1;
   ctx.strokeRect(WALL, HEADER_H + WALL, W - WALL * 2, 520 - WALL * 2);
 
-  for (const r of Object.values(ROOMS)) {
-    ctx.save();
-    ctx.globalAlpha = 0.35;
-    drawText(r.label, r.x + r.w / 2, r.y + 18, { size: 10, color: C.white, align: 'center' });
-    ctx.restore();
-  }
+  // room name labels removed
 };
 
 const drawAllFurniture = () => {
   // ── BOSS ROOM ──
   const br = ROOMS.boss;
-  drawRugTopDown(150, 170, 120, 72);       // center accent rug — drawn first so the cabinet sits ON TOP
+  drawRugTopDown(150, 170, 120, 72, C.rugBoss);   // center accent rug — drawn first so the cabinet sits ON TOP
   drawBookshelfTopDown(br.x + 260, br.y + WALL + 4, 120, 20);
   drawBossDesk(br.x + 25, br.y + 60, 150, 55);          // executive desk (monitor, nameplate, lamp…)
-  drawChairTopDown(br.x + 63, br.y + 118, '#4a3a2a');   // work chair under SIT_POS.jamesmie (x74)
+  drawChairTopDown(br.x + 65, br.y + 122, '#4a3a2a');   // work chair tucked into the desk-sprite's chair-notch (centre x76)
   drawPlantTopDown(br.x + ROOM_W - 40, br.y + WALL + 6);
   // boss extras
-  drawRugTopDown(br.x + 20, br.y + 55, 165, 65);
   drawWhiteboardTopDown(br.x + 40, br.y + WALL + 4, 110);
-  drawSofaTopDown(br.x + 30, br.y + 195, 90, 30);
-  drawCoffeeTableTopDown(br.x + 50, br.y + 232, 50, 18);
+  drawSofaTopDown(br.x + 30, br.y + 165, 90, 30);
+  drawCoffeeTableTopDown(br.x + 50, br.y + 202, 50, 18);
   drawCabinetTopDown(br.x + 195, br.y + 95, 30, 60);
-  // Manager workstation (boss room, top wall) — detailed cool-themed desk
-  drawManagerDesk(250, 90, 130, 50);
-  drawChairTopDown(304, 142, '#2c2940');   // under SIT_POS.manager (x315) — matches manager desk
+  // Manager workstation (boss room, top wall) — hand-drawn sprite (aspect → ~72 tall).
+  // The Manager is drawn at SIT_POS.manager (315,148) when seated.
+  drawManagerDesk(250, 78, 130, 72);
+  drawManagerChair(true);   // office-chair sprite over the desk's baked chair → empty-chair look (seated copy: drawChairBack)
   // boss extras — fill open floor (nav boxes mirror these; clear of door corridors)
   drawCrateTopDown(150, 262, 24);          // crate cluster (bottom-left, left of door)
   drawCrateTopDown(180, 268, 18);
@@ -937,15 +1167,13 @@ const drawAllFurniture = () => {
   drawCrateTopDown(dr.x + 30, dr.y + ROOM_H - 40, 24);
   drawCrateTopDown(dr.x + 58, dr.y + ROOM_H - 36, 20);
   // more dev extras
-  drawRugTopDown(500, 175, 120, 66);       // floor rug (flat, walkable)
+  drawRugTopDown(610, 195, 120, 66, C.rugDev);    // floor rug (flat, walkable) — centered in open floor
   drawCabinetTopDown(458, 196, 28, 52);    // filing cabinet (left wall, below door)
   drawPlantTopDown(820, 178);              // right-center plant
 
   // ── OPS ROOM ──
   const or = ROOMS.ops;
-  drawGamingDeskTopDown(or.x + 85, or.y + 55, 95, 50);
-  drawDeskMonitor(or.x + 95, or.y + 62, '#001a00');
-  drawGamingChairTopDown(or.x + 102, or.y + 105, C.deskGaming);  // ops chair — Editor (matches gaming desk)
+  drawEditorDesk(or.x, or.y);   // Editor station (PNG; fallback = gaming desk+monitor+chair)
   rect(or.x + 170, or.y + WALL + 6, 60, 20, '#111');
   rect(or.x + 172, or.y + WALL + 8, 56, 16, '#001a00');
   rect(or.x + 260, or.y + WALL + 6, 60, 20, '#111');
@@ -955,8 +1183,7 @@ const drawAllFurniture = () => {
   drawServerRackTopDown(or.x + ROOM_W - 45, or.y + WALL + 75);
   drawMonitorPanelTopDown(or.x + 340, or.y + WALL + 4, 95);
   // more ops extras — fill the big open floor
-  drawRugTopDown(120, 438, 150, 80);       // floor rug (flat, walkable)
-  drawCabinetTopDown(40, 330, 30, 58);     // cabinet (top-left wall)
+  drawRugTopDown(200, 435, 150, 80, C.rugOps);    // floor rug (flat, walkable) — centered in open floor
   // server bank — bottom-left corner (nav boxes mirror these)
   drawServerRackTopDown(20, 488);
   drawServerRackTopDown(51, 488);
@@ -965,9 +1192,9 @@ const drawAllFurniture = () => {
 
   // ── LOUNGE ──
   const lg = ROOMS.lounge;
-  drawRugTopDown(lg.x + 160, lg.y + 85, 130, 90);
-  drawSofaTopDown(lg.x + 165, lg.y + 100, 120, 38);
-  drawCoffeeTableTopDown(lg.x + 198, lg.y + 150, 55, 30);
+  drawRugTopDown(lg.x + 160, lg.y + 85, 130, 90, C.rugWarm);
+  drawSofaTopDown(lg.x + 165, lg.y + 70, 120, 38);
+  drawLivingRoomTable(lg.x + 185, lg.y + 137, 80, 35);   // centred under sofa, ~16px gap
   drawCoffeeMachineTopDown(lg.x + ROOM_W - 45, lg.y + WALL + 10);
   drawPlantTopDown(lg.x + WALL + 8, lg.y + WALL + 8);
   // lounge extras — OLED TV on the bottom wall, facing up toward the sofa
@@ -1757,6 +1984,16 @@ const _agentKey = (ag) => {
 // ============================================================
 // MOVEMENT HELPERS
 // ============================================================
+// Which chair (if any) a point lands on — lets us force seat enter/exit to run
+// through the front access lane instead of cutting diagonally across the desk.
+const seatKeyAt = (p) => {
+  for (const k in SIT_POS) {
+    const s = SIT_POS[k];
+    if (Math.abs(s.x - p.x) < 6 && Math.abs(s.y - p.y) < 6) return k;
+  }
+  return null;
+};
+
 // Walk an agent toward `target`, routing around furniture via the nav grid.
 // A path of line-of-sight waypoints is computed once per target and followed;
 // the final waypoint is the exact target (which may sit on the agent's own
@@ -1777,9 +2014,29 @@ const moveToward = (agent, target, dt) => {
   // (Re)plan whenever the destination changes.
   if (!agent._navTo || agent._navTo.x !== target.x || agent._navTo.y !== target.y) {
     agent._navTo = { x: target.x, y: target.y };
-    const p = navPath(agent.pos, target);
-    agent._navPath = (p ? p.slice(1) : []);   // drop the start cell
-    agent._navPath.push({ x: target.x, y: target.y });
+    // A seat sits on top of its desk (a nav obstacle), so planning straight
+    // in/out snaps to a diagonal side cell and slides across the desk. Force
+    // the path through the chair's front access lane so the step in/out is a
+    // clean straight hop, never through the desk.
+    const destSeat = seatKeyAt(target);
+    const fromSeat = seatKeyAt(agent.pos);
+    let pts;
+    if (destSeat) {                 // sitting down → walk to the front lane, then step straight in
+      const ap = SEAT_APPROACH[destSeat];
+      const p = navPath(agent.pos, ap);
+      pts = (p ? p.slice(1) : []);
+      pts.push({ x: ap.x, y: ap.y }, { x: target.x, y: target.y });
+    } else if (fromSeat) {          // standing up → step straight out to the front lane, then route away
+      const ap = SEAT_APPROACH[fromSeat];
+      const p = navPath(ap, target);
+      pts = [{ x: ap.x, y: ap.y }, ...(p ? p.slice(1) : [])];
+      pts.push({ x: target.x, y: target.y });
+    } else {
+      const p = navPath(agent.pos, target);
+      pts = (p ? p.slice(1) : []);   // drop the start cell
+      pts.push({ x: target.x, y: target.y });
+    }
+    agent._navPath = pts;
     agent._navIdx = 0;
   }
 
@@ -1813,9 +2070,16 @@ const moveToward = (agent, target, dt) => {
 // ============================================================
 // BUBBLE DRAWING
 // ============================================================
+// True when a string is purely emoji/pictographic glyphs (no letters) — lets
+// emoji speech bubbles bob while text bubbles (chat phrases, labels) stay put.
+const isEmojiOnly = (s) =>
+  !!s && /^\p{Extended_Pictographic}+$/u.test(s.trim());
+
 const drawBubble = (agent, text_, isTask) => {
   const bx = agent.pos.x;
-  const by = agent.pos.y - (agent._sprH || 20 * S) - 14;
+  // Emoji speech (☕📱😴💭 …) gently bobs so it reads as "alive"; text stays put.
+  const bob = isEmojiOnly(text_) ? Math.sin(_lastTs / 350 + agent.pos.x * 0.1) * 2 : 0;
+  const by = agent.pos.y - (agent._sprH || 20 * S) - 14 + bob;
   ctx.save();
   ctx.font = '12px "Leelawadee UI","Tahoma",sans-serif';
   const measured = ctx.measureText(text_).width;
@@ -2145,6 +2409,26 @@ const loadPhotoSprites = () => {
   });
 };
 
+// Pre-baked soft contact shadow under a standing/walking agent. drawAgent runs
+// per agent EVERY frame and agents move, so calling the ctx.filter shadow() here
+// would be a blur op per agent per frame — instead bake the blurred footprint once
+// (same blur(7px) + rgba(0,0,0,0.85) as shadow(), so characters ground the same soft
+// way as every object) and blit it scaled to foot width. pad leaves room for the
+// blur to feather without clipping at the canvas edge.
+const AGENT_SH_W = 30, AGENT_SH_H = 10, AGENT_SH_PAD = 14;
+let _agentShadow = null;
+const buildAgentShadow = () => {
+  const cs = document.createElement('canvas');
+  cs.width = (AGENT_SH_W + AGENT_SH_PAD * 2) * DPR;
+  cs.height = (AGENT_SH_H + AGENT_SH_PAD * 2) * DPR;
+  const g = cs.getContext('2d');
+  g.scale(DPR, DPR);
+  g.filter = 'blur(7px)';
+  g.fillStyle = 'rgba(0,0,0,0.85)';
+  g.fillRect(AGENT_SH_PAD, AGENT_SH_PAD, AGENT_SH_W, AGENT_SH_H);
+  _agentShadow = cs;
+};
+
 const drawAgent = (agent) => {
   // Seated = working, or in a flow phase past the walk to the desk.
   // While walking_desk the agent should still face its travel direction and animate.
@@ -2192,19 +2476,14 @@ const drawAgent = (agent) => {
     : Math.round(Math.abs(Math.sin(walkP)) * 2.5);
 
   // Floor contact shadow grounds the character (skip when seated — feet are under the desk).
+  // Same soft blurred-rect look as every object's shadow(), pre-baked once and blitted
+  // at ~62% of the sprite width (offset +2px right to sit under the top-left key light).
   if (!seated) {
-    const shW = sprW * 0.30;
-    ctx.save();
-    ctx.translate(agent.pos.x, agent.pos.y);
-    ctx.scale(1, 0.34);
-    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, shW);
-    grad.addColorStop(0, 'rgba(0,0,0,0.55)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(0, 0, shW, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    if (!_agentShadow) buildAgentShadow();
+    const sScale = (sprW * 0.62) / AGENT_SH_W;
+    const dW = (AGENT_SH_W + AGENT_SH_PAD * 2) * sScale;
+    const dH = (AGENT_SH_H + AGENT_SH_PAD * 2) * sScale;
+    ctx.drawImage(_agentShadow, agent.pos.x + 2 - dW / 2, agent.pos.y - dH / 2, dW, dH);
   }
 
   if (photoCanvas) {
@@ -2223,18 +2502,9 @@ const drawAgent = (agent) => {
     drawSprite(grid, x, y - bob, agent.color, agent.facingLeft, agent.hairColor, agent.skinColor, sc);
   }
 
-  const labelFont = '11px "Leelawadee UI","Tahoma",sans-serif';
-  ctx.font = labelFont;
-  const nameW = ctx.measureText(agent.name).width;
   drawText(agent.name, agent.pos.x, y - 8, {
     size: 11, color: C.white, align: 'center', shadow: '#000', shadowBlur: 4,
   });
-  ctx.save();
-  ctx.fillStyle = agent.color;
-  ctx.beginPath();
-  ctx.arc(agent.pos.x - nameW / 2 - 8, y - 8, 4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 
   // Persistent "thinking" bubble above the head while actively doing something.
   // Suppressed while a flowing message bubble is up (the message replaces it).
@@ -2268,6 +2538,7 @@ const drawAgent = (agent) => {
 // GAME LOOP
 // ============================================================
 let _lastTs = 0;
+let _fps = 60;   // smoothed (EMA) frames-per-second, shown by the corner overlay
 
 // ============================================================
 // IDLE STATE MACHINE HELPERS
@@ -2917,6 +3188,24 @@ const update = (dt) => {
   }
 };
 
+// Pre-baked soft shadow for the chair-back (fixed 34×24). drawChairBack runs per
+// seated agent EVERY frame, so calling the ctx.filter shadow() there was a per-frame
+// blur — instead we bake the blurred rect once and blit the sprite. pad leaves room
+// for the blur to feather without clipping at the sprite edge.
+const CHAIR_SH_PAD = 20;
+let _chairShadow = null;
+const buildChairShadow = () => {
+  const cs = document.createElement('canvas');
+  cs.width = (34 + CHAIR_SH_PAD * 2) * DPR;
+  cs.height = (24 + CHAIR_SH_PAD * 2) * DPR;
+  const g = cs.getContext('2d');
+  g.scale(DPR, DPR);
+  g.filter = 'blur(7px)';
+  g.fillStyle = 'rgba(0,0,0,0.85)';
+  g.fillRect(CHAIR_SH_PAD, CHAIR_SH_PAD, 34, 24);
+  _chairShadow = cs;
+};
+
 // When an agent is seated (facing the desk, back to viewer), draw the chair
 // back OVER its lower body — so the chair occludes the legs from the front,
 // aligned with the screen the agent is working at. Called per-agent from the
@@ -2930,6 +3219,14 @@ const drawChairBack = (key, ag) => {
     (ag.state === 'idle_desk'   && ag._deskArrived) ||
     (ag.state === 'writer_flow' && ag._wPhase && ag._wPhase !== 'walking_desk');
   if (!seated) return;
+  // Manager: redraw his real office-chair sprite over him (head pokes above the
+  // backrest), matching the empty chair in the furniture layer. Falls back to the
+  // tinted chair-back below until the sprite decodes.
+  if (key === 'manager' && MANAGER_CHAIR_IMG.complete && MANAGER_CHAIR_IMG.naturalWidth) {
+    drawManagerChair(false);
+    return;
+  }
+  if (key === 'coder') { drawEditorChairBack(); return; }   // re-blit the baked gaming chair over him
   const sp = SIT_POS[key];
   if (!sp) return;
   // Each chair-back is tinted to its own desk's base color — derive a 4-tone
@@ -2939,7 +3236,6 @@ const drawChairBack = (key, ag) => {
     reader:   WORK_WOODS[0],   // walnut
     searcher: WORK_WOODS[1],   // oak
     writer:   WORK_WOODS[2],   // cherry
-    coder:    C.deskGaming,    // gaming desk (cool indigo)
     manager:  '#2c2940',       // manager desk
   };
   const base = DESK_BASE[key];
@@ -2947,7 +3243,9 @@ const drawChairBack = (key, ag) => {
     ? [base, shadeHex(base, 1.18), shadeHex(base, 1.5), shadeHex(base, 0.6)]
     : ['#3a2c1a', '#4a3a26', '#6a5240', '#52402c'];   // jamesmie — wood
   const cw = 34, x = Math.round(sp.x - cw / 2), y = Math.round(sp.y - 13), h = 24;
-  shadow(x, y, cw, h);
+  if (!_chairShadow) buildChairShadow();
+  // pre-baked soft shadow (matches shadow()'s blurred rect at x+2,y+5) — no per-frame ctx.filter
+  ctx.drawImage(_chairShadow, x + 2 - CHAIR_SH_PAD, y + 5 - CHAIR_SH_PAD, 34 + CHAIR_SH_PAD * 2, 24 + CHAIR_SH_PAD * 2);
   rect(x, y, cw, h, C4[0]);                 // chair body
   rect(x + 3, y + 2, cw - 6, h - 5, C4[1]); // cushion
   rect(x + 3, y, cw - 6, 3, C4[2]);         // top trim
@@ -2961,17 +3259,18 @@ const drawFloors = () => {
   ctx.drawImage(_floorCache, 0, 0, W, H);
 };
 
+// Syntax-highlight palette for drawDetails (static screen code lines).
+const CODE = ['#e06c75', '#61afef', '#98c379', '#c678dd', '#e5c07b'];
+
 // Screen content + glow, desk accessories, and wall decor — over furniture, under agents.
 const drawDetails = () => {
   const SCREENS = [
-    { x: 57,  y: 109, w: 34, h: 22, k: 'code' },  // boss (Jamesmie)
-    { x: 297, y: 99,  w: 36, h: 22, k: 'code' },  // manager
+    // boss (Jamesmie) + manager: monitor + keyboard are baked into the desk sprites —
+    // only the screen glow is layered on (see below), so no entries here.
     { x: 492, y: 109, w: 36, h: 24, k: 'code' },  // dev 1
     { x: 662, y: 109, w: 36, h: 24, k: 'code' },  // dev 2
     { x: 785, y: 109, w: 36, h: 24, k: 'code' },  // dev 3 (writer)
-    { x: 97,  y: 364, w: 36, h: 24, k: 'term' },  // ops 1 (Editor, shifted right)
   ];
-  const CODE = ['#e06c75', '#61afef', '#98c379', '#c678dd', '#e5c07b'];
   for (const s of SCREENS) {
     // Screen glow at half strength/spread (was r*1.6 @ 1.05).
     bloom(s.x + s.w / 2, s.y + s.h / 2, s.w * 1.15,
@@ -2989,6 +3288,21 @@ const drawDetails = () => {
     rect(s.x + s.w + 4, s.y + 5, 4, 3, '#f0e0c0');
   }
 
+  // boss (Jamesmie) screen glow — the monitor itself is part of the desk sprite,
+  // so just light it to match the live screens on the other desks (centre ~76,125).
+  bloom(76, 125, 39, 'rgba(110,165,255,0.7)', 0.52);
+
+  // manager: monitor + keyboard are baked into the desk sprite — light the baked
+  // screen (~312,104) to match the live desks, then lay a mouse (right of the baked
+  // keyboard) + a coffee mug (front-left desk surface) on top.
+  bloom(312, 104, 44, 'rgba(110,165,255,0.7)', 0.52);
+  rect(336, 129, 7, 11, '#2b2b3a');                  // mouse body
+  rect(337, 130, 5, 9, '#23232f');                   // top shell
+  rect(338, 131, 3, 3, C.managerIndigo);             // scroll wheel / LED (indigo theme)
+  rect(336, 129, 7, 1, 'rgba(255,255,255,0.20)');    // top-edge highlight
+  rect(278, 132, 6, 6, '#d05a3a');                   // coffee mug
+  rect(279, 133, 4, 3, '#f0e0c0');                   // mug rim / coffee
+
   // wall decor: clocks + a framed poster
   const clock = (x, y) => {
     rect(x, y, 14, 14, '#15151a'); rect(x + 1, y + 1, 12, 12, '#e8e8e8');
@@ -3002,6 +3316,27 @@ const drawDetails = () => {
   clock(ROOMS.dev.x + 300, ROOMS.dev.y + WALL + 6);
   frame(ROOMS.lounge.x + 36, ROOMS.lounge.y + WALL + 4, 30, 22, '#2d6b8b');
   frame(ROOMS.ops.x + 130, ROOMS.ops.y + WALL + 4, 26, 20, '#6b2d6b');
+};
+
+// Editor station monitors, drawn LIVE per-frame (NOT in the static scene cache):
+// the 3 screens + gaming PC case glow, always on. The screen ART itself is baked
+// into editor-desk-topdown.png; here we only re-light it so the monitors read as
+// "on". (The seated scrolling-code overlay was removed — it read as the screen
+// content sliding/flowing when the Editor sat down.) Called from draw() after the
+// cache blit, before agents, so the seated agent renders in front of his chair
+// while the monitors (above/behind him) stay visible.
+const EDITOR_MONITORS = [
+  { x: 65,  y: 342, w: 28, h: 20, k: 'code' },  // left screen
+  { x: 102, y: 334, w: 52, h: 24, k: 'code' },  // center screen (widest)
+  { x: 154, y: 344, w: 36, h: 20, k: 'term' },  // right screen
+];
+const EDITOR_PC = { x: 204, y: 372, r: 24 };     // gaming PC case (green fans) glow point
+const drawEditorScreens = () => {
+  bloom(EDITOR_PC.x, EDITOR_PC.y, EDITOR_PC.r, 'rgba(80,230,160,0.7)', 0.5);  // PC case
+  for (const m of EDITOR_MONITORS) {
+    bloom(m.x + m.w / 2, m.y + m.h / 2, m.w * 1.15,
+          m.k === 'term' ? 'rgba(60,230,130,0.7)' : 'rgba(110,165,255,0.7)', 0.55);  // screen glow
+  }
 };
 
 // Wall + surface decor (all non-blocking). Drawn over furniture, under agents.
@@ -3046,30 +3381,165 @@ const drawDecor = () => {
   rect(356, 360, 6, 44, 'rgba(8,8,12,0.7)');
 };
 
+// The rooms, floor, ambient light, furniture (incl. the blurred ctx.filter shadows)
+// and all décor/details are fully static — nothing in them animates or depends on
+// agent state — so they're rendered ONCE into an offscreen canvas and blitted each
+// frame (same trick as _floorCache). The per-frame cost drops to a single drawImage
+// plus the handful of moving agents, so the expensive shadow filters are paid at
+// build time, not 60×/second → solid 60fps. Rebuilt when a furniture sprite decodes.
+let _sceneCache = null;
+const buildSceneCache = () => {
+  const sc = document.createElement('canvas');
+  sc.width = W * DPR; sc.height = H * DPR;
+  const g = sc.getContext('2d');
+  g.scale(DPR, DPR);
+  const main = ctx;
+  ctx = g;                       // redirect every ctx-based draw helper into the cache
+  try {
+    drawAllRooms();
+    drawFloors();
+    drawAmbient();
+    drawAllFurniture();
+    drawDecor();
+    drawDetails();
+  } finally {
+    ctx = main;
+  }
+  _sceneCache = sc;
+};
+// A keyed furniture PNG finishing decode changes the static scene → rebuild it once.
+[JAMESMIE_DESK_IMG, MANAGER_DESK_IMG, MANAGER_CHAIR_IMG, SOFA_IMG, TABLE_IMG, EDITOR_DESK_IMG].forEach(img =>
+  img.addEventListener('load', () => { _sceneCache = null; }));
+
+// ── Adaptive renderer ────────────────────────────────────────────────────────
+// update() runs every rAF tick (cheap logic), but draw() is throttled: capped to
+// 60fps while anything is moving/animating, and skipped entirely when the whole scene
+// is at rest (all agents standing still, no bubble) — the canvas is already correct,
+// so re-drawing would only burn GPU. Full 60fps motion, ~0 GPU when idle.
+const RENDER_MS = 1000 / 60;            // active-render cap
+const REST_HEARTBEAT_MS = 1000;         // re-paint once/sec at rest (safety net)
+const BUSY_STATES = new Set([           // states with in-place, time-based animation
+  'working', 'walking_to_desk', 'jamesmie_flow', 'writer_flow', 'mgr_dispatch',
+  'mgr_report', 'done_flash',
+]);
+let _lastSig = '';      // last scene signature (positions / facing / states / bubbles)
+let _atRest = false;    // true once the settled "idle" frame has been painted
+let _lastRender = 0;    // ts of the last actual draw()
+// Cheap per-frame fingerprint of everything dynamic + whether a live animation is up.
+const sceneState = () => {
+  let sig = '', anim = false;
+  for (const k in agents) {
+    const a = agents[k];
+    if (BUSY_STATES.has(a.state) || a.flowMsg || a.speechText) anim = true;
+    if (k === 'coder' && (a.state === 'desk_linger' || (a.state === 'idle_desk' && a._deskArrived))) anim = true;
+    sig += `${Math.round(a.pos.x)},${Math.round(a.pos.y)},${a._lastDY || 0},${a.state},`
+         + `${a.flowMsg ? 1 : 0},${a.speechText ? 1 : 0},${a._doneTimer > 0 ? 1 : 0};`;
+  }
+  return { sig, anim };
+};
+
+// FPS overlay — drawn on the dynamic layer (never cached), in screen space. Shows the
+// real render rate while active (target 60), or "idle" when rendering is paused.
+const drawFps = () => {
+  const txt = _atRest ? 'idle' : Math.round(_fps) + ' fps';
+  ctx.save();
+  ctx.font = 'bold 11px monospace';
+  ctx.textBaseline = 'top';
+  const tw = ctx.measureText(txt).width;
+  const x = W - tw - 12, y = 7;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x - 5, y - 3, tw + 10, 18);
+  ctx.fillStyle = _atRest ? '#8aa0b8' : _fps >= 55 ? '#22c55e' : _fps >= 30 ? '#e5c07b' : '#e06c75';
+  ctx.fillText(txt, x, y);
+  ctx.restore();
+};
+
+// Diagnostic path overlay — OFF unless the URL has ?debug. Draws each agent's
+// live nav path + the seat approach lanes + the desk nav-boxes, so we can SEE
+// the actual route an agent takes in/out of its chair. Remove once diagnosed.
+const _DEBUG_PATHS = typeof location !== 'undefined' && /[?&]debug\b/.test(location.search);
+const drawDebugPaths = () => {
+  ctx.save();
+  ctx.lineWidth = 1;
+  // desk / furniture nav-boxes (red) — what the pathfinder treats as solid
+  ctx.strokeStyle = 'rgba(255,60,60,0.5)';
+  for (const o of NAV_OBSTACLES) ctx.strokeRect(o.x, o.y, o.w, o.h);
+  // seat (cyan) + its front approach lane (yellow)
+  for (const k in SIT_POS) {
+    const s = SIT_POS[k], a = SEAT_APPROACH[k];
+    ctx.fillStyle = '#0ff'; ctx.fillRect(s.x - 2, s.y - 2, 4, 4);
+    if (a) {
+      ctx.fillStyle = '#ff0'; ctx.fillRect(a.x - 2, a.y - 2, 4, 4);
+      ctx.strokeStyle = 'rgba(255,255,0,0.6)';
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(a.x, a.y); ctx.stroke();
+    }
+  }
+  // each agent's followed waypoint path (green) + pos→first-waypoint (magenta)
+  for (const [key, ag] of Object.entries(agents)) {
+    const p = ag._navPath;
+    if (p && p.length) {
+      ctx.strokeStyle = 'rgba(60,255,120,0.9)';
+      ctx.beginPath(); ctx.moveTo(ag.pos.x, ag.pos.y);
+      for (const w of p) ctx.lineTo(w.x, w.y);
+      ctx.stroke();
+      for (const w of p) { ctx.fillStyle = '#3f8'; ctx.fillRect(w.x - 1.5, w.y - 1.5, 3, 3); }
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = '9px monospace';
+    ctx.fillText(`${key}:${ag.state}`, ag.pos.x + 6, ag.pos.y - 16);
+  }
+  ctx.restore();
+};
+
 const draw = () => {
   ctx.clearRect(0, 0, W, H);
+  if (!_sceneCache) buildSceneCache();
   ctx.save();
   ctx.translate(0, -HEADER_H);   // header cropped → shift the whole world up
-  drawAllRooms();
-  drawFloors();
-  drawAmbient();
-  drawAllFurniture();
-  drawDecor();
-  drawDetails();
+  ctx.drawImage(_sceneCache, 0, 0, W, H);   // entire static scene in one blit
+  drawEditorScreens();                       // live monitor glow + flowing code (under agents)
   const sorted = Object.entries(agents).sort((a, b) => a[1].pos.y - b[1].pos.y);
   for (const [key, ag] of sorted) {
     drawAgent(ag);
     drawChairBack(key, ag);   // cover this agent's legs only; later agents render on top
   }
+  if (_DEBUG_PATHS) drawDebugPaths();
   ctx.restore();
+  drawFps();
 };
 
+// Pause all work while the page is hidden (minimised / another app focused). The
+// browser already throttles rAF when hidden; this gate guarantees ~0 GPU even on the
+// odd throttled tick, and resets the timebase on return so dt doesn't spike.
+let _visible = !document.hidden;
+document.addEventListener('visibilitychange', () => {
+  _visible = !document.hidden;
+  if (_visible) _lastTs = performance.now();
+});
+
 const loop = (ts) => {
+  requestAnimationFrame(loop);                 // keep the chain alive (rAF self-pauses when hidden)
+  if (!_visible) return;                        // hidden → skip everything, ~0 GPU
   const dt = Math.min(ts - _lastTs, 100);
   _lastTs = ts;
-  update(dt);
-  draw();
-  requestAnimationFrame(loop);
+  update(dt);                                  // logic always advances (cheap, 60Hz)
+
+  const { sig, anim } = sceneState();
+  const active = anim || sig !== _lastSig;     // something moving / animating this frame?
+  _lastSig = sig;
+
+  if (active) {
+    const rdt = ts - _lastRender;
+    if (rdt < RENDER_MS - 1) return;           // cap active redraws at 60fps
+    _fps += (1000 / rdt - _fps) * 0.15;        // EMA of the real render rate (~60)
+    _atRest = false;
+    _lastRender = ts;
+    draw();
+  } else if (!_atRest || ts - _lastRender > REST_HEARTBEAT_MS) {
+    _atRest = true;                            // paint one settled frame (shows "idle"), then pause
+    _lastRender = ts;
+    draw();
+  }
 };
 
 loadPhotoSprites();    // async — agents with a photoDir swap to their real PNGs once ready
